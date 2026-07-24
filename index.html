@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadmap Toolkit — диаграммы Ганта</title>
+  <meta name="description" content="Создавайте красивые roadmap и диаграммы Ганта прямо в браузере — без сервера и регистрации.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <p class="brand">Roadmap Toolkit</p>
+      <h1>Дорожная карта за пару минут</h1>
+      <p class="hero-lead">Добавьте категории, задачи и сроки — мы автоматически построим дорожную карту.</p>
+    </header>
+
+    <main class="layout">
+      <section class="panel" aria-labelledby="form-heading">
+        <div class="panel-head">
+          <h2 id="form-heading">Данные roadmap</h2>
+          <div class="panel-actions">
+            <button type="button" class="btn btn-ghost" id="load-example-btn">Загрузить пример</button>
+            <button type="button" class="btn btn-ghost btn-danger-text" id="clear-all-btn">Очистить всё</button>
+          </div>
+        </div>
+
+        <div class="field field-title">
+          <label for="diagram-title">Название roadmap</label>
+          <input type="text" id="diagram-title" name="diagram-title" placeholder="Например: Планы Q3 2026" autocomplete="off" maxlength="120">
+          <p class="field-error" id="title-error" hidden></p>
+        </div>
+
+        <div class="tasks-header">
+          <h3>Задачи</h3>
+          <p class="tasks-hint">Задачи с одинаковой категорией объединятся в одну секцию на диаграмме.</p>
+        </div>
+
+        <div id="tasks-container" class="tasks-container" aria-live="polite"></div>
+        <p class="form-error" id="form-error" hidden></p>
+
+        <div class="form-footer">
+          <button type="button" class="btn btn-secondary" id="add-task-btn">+ Добавить задачу</button>
+          <button type="button" class="btn btn-primary" id="build-btn">Построить roadmap</button>
+        </div>
+      </section>
+
+      <section class="result" id="result-section" hidden>
+        <div class="result-head">
+          <h2>Диаграмма</h2>
+          <div class="export-actions" id="export-actions">
+            <button type="button" class="btn btn-secondary" id="download-svg-btn">Скачать SVG</button>
+            <button type="button" class="btn btn-secondary" id="download-png-btn">Скачать PNG</button>
+            <button type="button" class="btn btn-ghost" id="copy-mermaid-btn">Скопировать Mermaid-код</button>
+          </div>
+        </div>
+        <p class="copy-toast" id="copy-toast" hidden>Код скопирован</p>
+        <p class="render-error" id="render-error" hidden></p>
+        <div class="diagram-scroll" id="diagram-scroll">
+          <div id="diagram-container" class="diagram-container"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Работает полностью в браузере · данные сохраняются локально</p>
+    </footer>
+  </div>
+
+  <div class="loader-overlay" id="loader-overlay" hidden aria-hidden="true">
+    <div class="loader-card" role="status" aria-live="polite">
+      <div class="loader-spinner" aria-hidden="true"></div>
+      <p>Строим ваш roadmap...</p>
+    </div>
+  </div>
+
+  <template id="task-template">
+    <article class="task-card" data-task-id="">
+      <div class="task-card-top">
+        <span class="task-number"></span>
+        <div class="task-card-actions">
+          <button type="button" class="btn btn-tiny" data-action="duplicate" title="Дублировать">Дублировать</button>
+          <button type="button" class="btn btn-tiny btn-danger-text" data-action="remove" title="Удалить">Удалить</button>
+        </div>
+      </div>
+      <div class="task-fields">
+        <div class="field">
+          <label>Категория</label>
+          <input type="text" data-field="category" placeholder="Например: Снижение SCV" maxlength="80" autocomplete="off">
+          <p class="field-error" data-error="category" hidden></p>
+        </div>
+        <div class="field">
+          <label>Название задачи</label>
+          <input type="text" data-field="name" placeholder="Например: Детекция аномалий" maxlength="120" autocomplete="off">
+          <p class="field-error" data-error="name" hidden></p>
+        </div>
+        <div class="field field-date">
+          <label>Дата начала</label>
+          <input type="date" data-field="start">
+          <p class="field-error" data-error="start" hidden></p>
+        </div>
+        <div class="field field-date">
+          <label>Дата окончания</label>
+          <input type="date" data-field="end">
+          <p class="field-error" data-error="end" hidden></p>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="script.js"></script>
+</body>
+</html>
