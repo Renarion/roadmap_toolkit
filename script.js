@@ -50,6 +50,8 @@
     loader: document.getElementById("loader-overlay"),
     downloadSvgBtn: document.getElementById("download-svg-btn"),
     downloadPngBtn: document.getElementById("download-png-btn"),
+    downloadMiroBtn: document.getElementById("download-miro-btn"),
+    fullscreenBtn: document.getElementById("fullscreen-btn"),
     copyMermaidBtn: document.getElementById("copy-mermaid-btn"),
     copyToast: document.getElementById("copy-toast"),
     taskTemplate: document.getElementById("task-template"),
@@ -100,14 +102,36 @@
       truncateLabel(task.name, 40),
     ]);
     const longest = labels.reduce((max, label) => Math.max(max, label.length), 8);
-    const leftPadding = Math.min(420, Math.max(200, longest * 10 + 32));
+    // More room for larger section/task labels.
+    const leftPadding = Math.min(460, Math.max(220, longest * 11 + 36));
 
     const starts = taskList.map((task) => task.start).sort();
     const ends = taskList.map((task) => task.end).sort();
     const spanDays = daysBetween(starts[0], ends[ends.length - 1]);
-    // Wider timeline so bars and labels stay readable.
-    const pxPerDay = spanDays > 120 ? 16 : spanDays > 60 ? 22 : 28;
-    const useWidth = Math.max(1280, Math.ceil(leftPadding + spanDays * pxPerDay + 160));
+
+    const scrollEl = document.getElementById("diagram-scroll");
+    const pageBudget = Math.min(window.innerWidth - 48, 1520);
+    const available = Math.max(
+      1100,
+      (scrollEl?.clientWidth || 0) - 8,
+      pageBudget - 64
+    );
+
+    // Fit a typical quarter into the visible frame with only light sideways scroll.
+    const timelineBudget = Math.max(760, available - leftPadding - 40);
+    let pxPerDay;
+    if (spanDays <= 100) {
+      pxPerDay = Math.min(14, Math.max(9, timelineBudget / spanDays));
+    } else if (spanDays <= 180) {
+      pxPerDay = Math.min(11, Math.max(7, timelineBudget / spanDays));
+    } else {
+      pxPerDay = Math.min(9, Math.max(5, timelineBudget / spanDays));
+    }
+
+    const useWidth = Math.max(
+      available,
+      Math.ceil(leftPadding + spanDays * pxPerDay + 40)
+    );
 
     return { leftPadding, useWidth };
   }
@@ -613,7 +637,7 @@
     });
 
     const lines = [
-      `%%{init: {"gantt": {"useWidth": ${useWidth}, "leftPadding": ${leftPadding}, "rightPadding": 40, "useMaxWidth": false, "barHeight": 24, "barGap": 12, "fontSize": 13, "sectionFontSize": 13, "topPadding": 50, "gridLineStartPadding": 24}} }%%`,
+      `%%{init: {"gantt": {"useWidth": ${useWidth}, "leftPadding": ${leftPadding}, "rightPadding": 40, "useMaxWidth": false, "barHeight": 30, "barGap": 12, "fontSize": 16, "sectionFontSize": 16, "topPadding": 68, "titleTopMargin": 30, "gridLineStartPadding": 28}} }%%`,
       "gantt",
       `    title ${safeTitle}`,
       "    dateFormat YYYY-MM-DD",
@@ -669,6 +693,7 @@
       lastMermaidCode = mermaidCode;
       fitDiagramWidth();
       emphasizeAxisDates();
+      emphasizeDiagramText();
       styleTaskBars();
       return true;
     } catch (error) {
@@ -703,8 +728,33 @@
     const svg = els.diagramContainer.querySelector("svg");
     if (!svg) return;
     svg.querySelectorAll(".tick text, g.grid .tick text").forEach((node) => {
-      node.setAttribute("font-size", "15");
+      node.setAttribute("font-size", "16");
       node.setAttribute("font-weight", "600");
+    });
+  }
+
+  function emphasizeDiagramText() {
+    const svg = els.diagramContainer.querySelector("svg");
+    if (!svg) return;
+
+    svg.querySelectorAll("text.sectionTitle, .sectionTitle").forEach((node) => {
+      node.setAttribute("font-size", "16");
+      node.setAttribute("font-weight", "700");
+    });
+
+    svg
+      .querySelectorAll(
+        "text.taskText, text.taskTextOutsideLeft, text.taskTextOutsideRight, .taskText, .taskTextOutsideLeft, .taskTextOutsideRight"
+      )
+      .forEach((node) => {
+        node.setAttribute("font-size", "15");
+        node.setAttribute("font-weight", "600");
+      });
+
+    // Title sits above the chart; give it a bit more breathing room visually.
+    svg.querySelectorAll("text.titleText, .titleText").forEach((node) => {
+      node.setAttribute("font-size", "20");
+      node.setAttribute("font-weight", "700");
     });
   }
 
@@ -906,6 +956,91 @@
     image.src = url;
   }
 
+  function downloadForMiro() {
+    const svg = getSvgElement();
+    if (!svg) {
+      setRenderError("Сначала постройте roadmap");
+      return;
+    }
+
+    const title = els.title.value.trim() || DEFAULT_TITLE;
+    const filename = `${slugifyFilename(title)}-miro.svg`;
+    const { source } = prepareExportSvg(svg);
+    const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+    triggerDownload(blob, filename);
+
+    els.copyToast.hidden = false;
+    els.copyToast.textContent = "SVG скачан — перетащите файл на доску Miro";
+    window.setTimeout(() => {
+      els.copyToast.hidden = true;
+      els.copyToast.textContent = "Код скопирован";
+    }, 2600);
+  }
+
+  function openFullscreenDiagram() {
+    const svg = getSvgElement();
+    if (!svg) {
+      setRenderError("Сначала постройте roadmap");
+      return;
+    }
+
+    const title = els.title.value.trim() || DEFAULT_TITLE;
+    const { source, width, height } = prepareExportSvg(svg);
+    const safeTitle = String(title)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+    const svgMarkup = source.replace(/^<\?xml[^>]*>\s*/i, "");
+
+    const html = [
+      "<!DOCTYPE html>",
+      '<html lang="ru">',
+      "<head>",
+      '<meta charset="UTF-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+      `<title>${safeTitle} — полный экран</title>`,
+      "<style>",
+      "html,body{margin:0;min-height:100%;background:#f4f7f8;font-family:DM Sans,Segoe UI,sans-serif;color:#152028}",
+      ".topbar{position:sticky;top:0;z-index:2;display:flex;gap:.75rem;align-items:center;justify-content:space-between;padding:.85rem 1.1rem;background:rgba(255,255,255,.92);border-bottom:1px solid #d7e0e6;backdrop-filter:blur(8px)}",
+      ".topbar h1{margin:0;font-size:1.05rem;font-weight:700}",
+      ".topbar button{min-height:2.3rem;padding:.4rem .9rem;border:1px solid #b8c7d0;border-radius:999px;background:#fff;font:inherit;font-weight:600;cursor:pointer}",
+      ".stage{min-height:calc(100vh - 64px);padding:1.25rem;overflow:auto}",
+      ".frame{width:max-content;min-width:100%;margin:0 auto;padding:1rem;background:#fff;border:1px solid #d7e0e6;border-radius:16px;box-shadow:0 10px 30px rgba(21,32,40,.08)}",
+      `svg{display:block;max-width:none!important;width:${width}px!important;height:${height}px!important}`,
+      "</style>",
+      "</head>",
+      "<body>",
+      '<div class="topbar">',
+      `<h1>${safeTitle}</h1>`,
+      '<button type="button" id="fs-btn">На весь экран</button>',
+      "</div>",
+      '<div class="stage"><div class="frame">',
+      svgMarkup,
+      "</div></div>",
+      "<script>",
+      'document.getElementById("fs-btn").addEventListener("click",function(){',
+      "var root=document.documentElement;",
+      "if(!document.fullscreenElement){root.requestFullscreen&&root.requestFullscreen();}",
+      "else{document.exitFullscreen&&document.exitFullscreen();}",
+      "});",
+      "</" + "script>",
+      "</body></html>",
+    ].join("");
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const tab = window.open(url, "_blank");
+    if (!tab) {
+      setRenderError(
+        "Браузер заблокировал новую вкладку. Разрешите всплывающие окна."
+      );
+      URL.revokeObjectURL(url);
+      return;
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
   async function copyMermaidCode() {
     if (!lastMermaidCode) {
       setRenderError("Сначала постройте roadmap");
@@ -1053,15 +1188,15 @@
         rect.task { stroke: #084c47 !important; stroke-width: 1.75px !important; }
       `,
       gantt: {
-        titleTopMargin: 22,
-        barHeight: 24,
+        titleTopMargin: 30,
+        barHeight: 30,
         barGap: 12,
-        topPadding: 50,
-        leftPadding: 200,
+        topPadding: 68,
+        leftPadding: 220,
         rightPadding: 40,
-        gridLineStartPadding: 24,
-        fontSize: 13,
-        sectionFontSize: 13,
+        gridLineStartPadding: 28,
+        fontSize: 16,
+        sectionFontSize: 16,
         numberSectionStyles: 2,
         useMaxWidth: false,
       },
@@ -1085,6 +1220,8 @@
     els.clearAllBtn.addEventListener("click", clearAll);
     els.downloadSvgBtn.addEventListener("click", downloadSVG);
     els.downloadPngBtn.addEventListener("click", downloadPNG);
+    els.downloadMiroBtn.addEventListener("click", downloadForMiro);
+    els.fullscreenBtn.addEventListener("click", openFullscreenDiagram);
     els.copyMermaidBtn.addEventListener("click", () => {
       copyMermaidCode().catch(console.error);
     });

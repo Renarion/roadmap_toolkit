@@ -53,11 +53,14 @@
         <div class="result-head">
           <h2>Диаграмма</h2>
           <div class="export-actions" id="export-actions">
+            <button type="button" class="btn btn-secondary" id="fullscreen-btn">Открыть на весь экран</button>
             <button type="button" class="btn btn-secondary" id="download-svg-btn">Скачать SVG</button>
             <button type="button" class="btn btn-secondary" id="download-png-btn">Скачать PNG</button>
+            <button type="button" class="btn btn-secondary" id="download-miro-btn">Скачать для Miro</button>
             <button type="button" class="btn btn-ghost" id="copy-mermaid-btn">Скопировать Mermaid-код</button>
           </div>
         </div>
+        <p class="export-hint" id="export-hint">Для Miro: скачайте SVG и перетащите файл на доску. Полоски станут картинкой — править сроки удобнее здесь, затем обновить файл.</p>
         <p class="copy-toast" id="copy-toast" hidden>Код скопирован</p>
         <p class="render-error" id="render-error" hidden></p>
         <div class="diagram-scroll" id="diagram-scroll">

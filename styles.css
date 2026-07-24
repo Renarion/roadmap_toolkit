@@ -16,7 +16,7 @@
   --radius-sm: 10px;
   --font: "DM Sans", "Segoe UI", sans-serif;
   --display: "Fraunces", Georgia, serif;
-  --max: 1180px;
+  --max: 1520px;
 }
 
 *,
@@ -53,7 +53,7 @@ button {
 }
 
 .page {
-  width: min(100% - 2rem, var(--max));
+  width: min(100% - 1.5rem, var(--max));
   max-width: 100%;
   margin: 0 auto;
   padding: 2.5rem 0 3.5rem;
@@ -477,6 +477,14 @@ button {
   font-weight: 600;
 }
 
+.export-hint {
+  margin: -0.25rem 0 0.85rem;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  max-width: 62rem;
+}
+
 .render-error {
   margin: 0 0 0.85rem;
   padding: 0.75rem 0.9rem;
@@ -521,6 +529,22 @@ button {
 /* Keep task labels readable, make X-axis dates larger. */
 .diagram-container svg .tick text,
 .diagram-container svg g.grid .tick text {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+}
+
+.diagram-container svg text.sectionTitle,
+.diagram-container svg .sectionTitle {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+}
+
+.diagram-container svg text.taskText,
+.diagram-container svg text.taskTextOutsideLeft,
+.diagram-container svg text.taskTextOutsideRight,
+.diagram-container svg .taskText,
+.diagram-container svg .taskTextOutsideLeft,
+.diagram-container svg .taskTextOutsideRight {
   font-size: 15px !important;
   font-weight: 600 !important;
 }
