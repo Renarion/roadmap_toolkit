@@ -16,7 +16,8 @@
   --radius-sm: 10px;
   --font: "DM Sans", "Segoe UI", sans-serif;
   --display: "Fraunces", Georgia, serif;
-  --max: 1520px;
+  --max: 1400px;
+  --form-max: 980px;
 }
 
 *,
@@ -98,6 +99,12 @@ button {
   max-width: 100%;
 }
 
+.form-shell {
+  width: min(100%, var(--form-max));
+  margin-inline: auto;
+  min-width: 0;
+}
+
 .panel,
 .result {
   background: var(--surface);
@@ -108,7 +115,15 @@ button {
   animation: rise 0.6s ease both;
   min-width: 0;
   max-width: 100%;
+}
+
+.panel {
   overflow: hidden;
+}
+
+.result {
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .panel-head,
@@ -245,12 +260,6 @@ button {
   display: grid;
   grid-template-columns: 1.15fr 1.35fr 1.15fr;
   gap: 0.75rem;
-}
-
-.field-period .field-hint {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 0.78rem;
 }
 
 .date-range-trigger {
@@ -477,14 +486,6 @@ button {
   font-weight: 600;
 }
 
-.export-hint {
-  margin: -0.25rem 0 0.85rem;
-  color: var(--ink-soft);
-  font-size: 0.86rem;
-  line-height: 1.45;
-  max-width: 62rem;
-}
-
 .render-error {
   margin: 0 0 0.85rem;
   padding: 0.75rem 0.9rem;
@@ -495,14 +496,12 @@ button {
 .diagram-scroll {
   width: 100%;
   max-width: 100%;
-  overflow: auto;
-  overscroll-behavior: contain;
+  overflow-x: auto;
+  overflow-y: visible;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #f8fbfb;
   -webkit-overflow-scrolling: touch;
-  /* Keep the page layout stable; scroll the roadmap inside this frame. */
-  max-height: min(68vh, 640px);
 }
 
 .diagram-container {
@@ -656,10 +655,6 @@ button {
 
   .form-footer .btn {
     width: 100%;
-  }
-
-  .diagram-scroll {
-    max-height: min(62vh, 560px);
   }
 
   .brand {

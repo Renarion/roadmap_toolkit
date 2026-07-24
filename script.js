@@ -50,8 +50,6 @@
     loader: document.getElementById("loader-overlay"),
     downloadSvgBtn: document.getElementById("download-svg-btn"),
     downloadPngBtn: document.getElementById("download-png-btn"),
-    downloadMiroBtn: document.getElementById("download-miro-btn"),
-    fullscreenBtn: document.getElementById("fullscreen-btn"),
     copyMermaidBtn: document.getElementById("copy-mermaid-btn"),
     copyToast: document.getElementById("copy-toast"),
     taskTemplate: document.getElementById("task-template"),
@@ -110,7 +108,7 @@
     const spanDays = daysBetween(starts[0], ends[ends.length - 1]);
 
     const scrollEl = document.getElementById("diagram-scroll");
-    const pageBudget = Math.min(window.innerWidth - 48, 1520);
+    const pageBudget = Math.min(window.innerWidth - 48, 1400);
     const available = Math.max(
       1100,
       (scrollEl?.clientWidth || 0) - 8,
@@ -691,10 +689,12 @@
       // SVG comes from Mermaid; safe enough when securityLevel is strict.
       holder.innerHTML = svg;
       lastMermaidCode = mermaidCode;
-      fitDiagramWidth();
       emphasizeAxisDates();
       emphasizeDiagramText();
       styleTaskBars();
+      colorSectionBands();
+      wrapTaskBarLabels();
+      fitDiagramWidth();
       return true;
     } catch (error) {
       console.error(error);
@@ -766,17 +766,9 @@
     const stroke = "#084c47";
 
     svg.querySelectorAll("rect").forEach((rect) => {
-      const cls = String(rect.getAttribute("class") || "");
+      if (!isTaskRect(rect)) return;
+
       const fillAttr = String(rect.getAttribute("fill") || "").toLowerCase();
-      const isTask =
-        /\btask\b/i.test(cls) ||
-        fillAttr === fill.toLowerCase() ||
-        fillAttr === "#0b5f59" ||
-        fillAttr === "#5b8a84";
-
-      if (!isTask) return;
-
-      // Keep existing fill when Mermaid already set one; only reinforce the outline.
       if (!rect.getAttribute("fill") || fillAttr === "none") {
         rect.setAttribute("fill", fill);
       }
@@ -785,6 +777,250 @@
       rect.setAttribute("rx", "2");
       rect.setAttribute("ry", "2");
     });
+  }
+
+  function isTaskRect(rect) {
+    const cls = String(rect.getAttribute("class") || "");
+    const fillAttr = String(rect.getAttribute("fill") || "").toLowerCase();
+    return (
+      /\btask\b/i.test(cls) ||
+      fillAttr === "#0f766e" ||
+      fillAttr === "#0b5f59" ||
+      fillAttr === "#5b8a84"
+    );
+  }
+
+  function colorSectionBands() {
+    const svg = els.diagramContainer.querySelector("svg");
+    if (!svg) return;
+
+    const palette = ["#ebe6f7", "#ffffff", "#fff3d1", "#e7f3ee", "#e6f0fa", "#f7efe8"];
+    const sectionRects = [...svg.querySelectorAll("rect")].filter((rect) => {
+      const cls = String(rect.getAttribute("class") || "");
+      return /section/i.test(cls) && !isTaskRect(rect);
+    });
+
+    if (sectionRects.length) {
+      sectionRects.forEach((rect, index) => {
+        rect.setAttribute("fill", palette[index % palette.length]);
+        rect.setAttribute("stroke", "none");
+      });
+      return;
+    }
+
+    // Fallback: large background strips behind tasks (non-task wide rects).
+    const candidates = [...svg.querySelectorAll("rect")].filter((rect) => {
+      if (isTaskRect(rect)) return false;
+      const width = Number(rect.getAttribute("width") || 0);
+      const height = Number(rect.getAttribute("height") || 0);
+      return width > 200 && height > 20;
+    });
+
+    candidates
+      .sort((a, b) => Number(a.getAttribute("y") || 0) - Number(b.getAttribute("y") || 0))
+      .forEach((rect, index) => {
+        rect.setAttribute("fill", palette[index % palette.length]);
+        rect.setAttribute("stroke", "none");
+      });
+  }
+
+  function measureTextWidth(svg, text, fontSize, fontWeight) {
+    const probe = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    probe.setAttribute("font-size", String(fontSize));
+    probe.setAttribute("font-weight", String(fontWeight));
+    probe.setAttribute("font-family", "DM Sans, Segoe UI, sans-serif");
+    probe.textContent = text;
+    svg.appendChild(probe);
+    let width = 0;
+    try {
+      width = probe.getComputedTextLength();
+    } catch (_) {
+      width = text.length * fontSize * 0.56;
+    }
+    probe.remove();
+    return width;
+  }
+
+  function wrapWordsToWidth(svg, text, maxWidth, fontSize, fontWeight) {
+    const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return [""];
+
+    const lines = [];
+    let current = "";
+
+    const fits = (value) => measureTextWidth(svg, value, fontSize, fontWeight) <= maxWidth;
+
+    words.forEach((word) => {
+      const candidate = current ? `${current} ${word}` : word;
+      if (fits(candidate) || !current) {
+        if (!current && !fits(word)) {
+          // Hard-wrap an oversized token.
+          let chunk = "";
+          for (const ch of word) {
+            const next = chunk + ch;
+            if (chunk && !fits(next)) {
+              lines.push(chunk);
+              chunk = ch;
+            } else {
+              chunk = next;
+            }
+          }
+          current = chunk;
+        } else {
+          current = candidate;
+        }
+      } else {
+        lines.push(current);
+        current = word;
+      }
+    });
+
+    if (current) lines.push(current);
+    return lines;
+  }
+
+  function shiftSvgBelow(svg, fromY, delta) {
+    if (delta <= 0) return;
+
+    svg.querySelectorAll("*").forEach((node) => {
+      ["y", "y1", "y2"].forEach((attr) => {
+        if (!node.hasAttribute(attr)) return;
+        const value = Number(node.getAttribute(attr));
+        if (Number.isFinite(value) && value >= fromY - 0.01) {
+          node.setAttribute(attr, String(value + delta));
+        }
+      });
+
+      const transform = node.getAttribute("transform");
+      if (transform && /translate\(/i.test(transform)) {
+        node.setAttribute(
+          "transform",
+          transform.replace(/translate\(([^,]+),\s*([^)]+)\)/i, (_, x, y) => {
+            const ty = Number(y);
+            if (!Number.isFinite(ty) || ty < fromY - 0.01) {
+              return `translate(${x}, ${y})`;
+            }
+            return `translate(${x}, ${ty + delta})`;
+          })
+        );
+      }
+    });
+  }
+
+  function growSectionAround(svg, barY, extra) {
+    if (extra <= 0) return;
+    svg.querySelectorAll("rect").forEach((rect) => {
+      if (isTaskRect(rect)) return;
+      const y = Number(rect.getAttribute("y") || 0);
+      const h = Number(rect.getAttribute("height") || 0);
+      if (!Number.isFinite(y) || !Number.isFinite(h)) return;
+      if (y <= barY + 1 && y + h >= barY + 4) {
+        rect.setAttribute("height", String(h + extra));
+      }
+    });
+  }
+
+  function wrapTaskBarLabels() {
+    const svg = els.diagramContainer.querySelector("svg");
+    if (!svg) return;
+
+    const LINE_HEIGHT = 17;
+    const PAD_X = 12;
+    const PAD_Y = 10;
+    const FONT_SIZE = 15;
+    const FONT_WEIGHT = 600;
+
+    const bars = [...svg.querySelectorAll("rect")]
+      .filter(isTaskRect)
+      .sort(
+        (a, b) =>
+          Number(a.getAttribute("y") || 0) - Number(b.getAttribute("y") || 0)
+      );
+
+    const labels = [
+      ...svg.querySelectorAll(
+        "text.taskText, text.taskTextOutsideLeft, text.taskTextOutsideRight"
+      ),
+    ];
+
+    bars.forEach((rect) => {
+      const x = Number(rect.getAttribute("x") || 0);
+      const y = Number(rect.getAttribute("y") || 0);
+      const w = Number(rect.getAttribute("width") || 0);
+      const h = Number(rect.getAttribute("height") || 0);
+      if (!(w > 0 && h > 0)) return;
+
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+
+      let label = null;
+      let best = Infinity;
+      labels.forEach((textNode) => {
+        if (textNode.dataset.wrapped === "1") return;
+        const tx = Number(textNode.getAttribute("x") || 0);
+        const ty = Number(textNode.getAttribute("y") || 0);
+        const dy = Math.abs(ty - cy);
+        const dx = Math.abs(tx - cx);
+        if (dy > h + 10) return;
+        const score = dy * 3 + dx * 0.05;
+        if (score < best) {
+          best = score;
+          label = textNode;
+        }
+      });
+
+      if (!label) return;
+
+      const raw = (label.textContent || "").replace(/\s+/g, " ").trim();
+      if (!raw) return;
+
+      const maxWidth = Math.max(36, w - PAD_X * 2);
+      const lines = wrapWordsToWidth(svg, raw, maxWidth, FONT_SIZE, FONT_WEIGHT);
+      const newH = Math.max(h, lines.length * LINE_HEIGHT + PAD_Y);
+      const extra = newH - h;
+
+      if (extra > 0) {
+        // Push everything under this bar, then expand the bar itself.
+        shiftSvgBelow(svg, y + h - 0.05, extra);
+        growSectionAround(svg, y, extra);
+        rect.setAttribute("height", String(newH));
+      }
+
+      while (label.firstChild) label.removeChild(label.firstChild);
+      label.setAttribute("class", "taskText");
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("dominant-baseline", "central");
+      label.setAttribute("font-size", String(FONT_SIZE));
+      label.setAttribute("font-weight", String(FONT_WEIGHT));
+      label.setAttribute("fill", "#ffffff");
+      label.setAttribute("x", String(cx));
+
+      const blockHeight = (lines.length - 1) * LINE_HEIGHT;
+      const firstY = y + newH / 2 - blockHeight / 2;
+      label.setAttribute("y", String(firstY));
+
+      lines.forEach((line, index) => {
+        const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+        tspan.setAttribute("x", String(cx));
+        tspan.setAttribute("y", String(firstY + index * LINE_HEIGHT));
+        tspan.textContent = line;
+        label.appendChild(tspan);
+      });
+
+      label.dataset.wrapped = "1";
+    });
+
+    // Grow SVG canvas after vertical expansions.
+    try {
+      const bbox = svg.getBBox();
+      const width = Math.ceil(Math.max(bbox.x + bbox.width, Number(svg.getAttribute("width") || 0)));
+      const height = Math.ceil(Math.max(bbox.y + bbox.height + 12, Number(svg.getAttribute("height") || 0)));
+      svg.setAttribute("width", String(width));
+      svg.setAttribute("height", String(height));
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    } catch (_) {
+      /* ignore */
+    }
   }
 
   function measureSvgSize(svg) {
@@ -956,91 +1192,6 @@
     image.src = url;
   }
 
-  function downloadForMiro() {
-    const svg = getSvgElement();
-    if (!svg) {
-      setRenderError("Сначала постройте roadmap");
-      return;
-    }
-
-    const title = els.title.value.trim() || DEFAULT_TITLE;
-    const filename = `${slugifyFilename(title)}-miro.svg`;
-    const { source } = prepareExportSvg(svg);
-    const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
-    triggerDownload(blob, filename);
-
-    els.copyToast.hidden = false;
-    els.copyToast.textContent = "SVG скачан — перетащите файл на доску Miro";
-    window.setTimeout(() => {
-      els.copyToast.hidden = true;
-      els.copyToast.textContent = "Код скопирован";
-    }, 2600);
-  }
-
-  function openFullscreenDiagram() {
-    const svg = getSvgElement();
-    if (!svg) {
-      setRenderError("Сначала постройте roadmap");
-      return;
-    }
-
-    const title = els.title.value.trim() || DEFAULT_TITLE;
-    const { source, width, height } = prepareExportSvg(svg);
-    const safeTitle = String(title)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-    const svgMarkup = source.replace(/^<\?xml[^>]*>\s*/i, "");
-
-    const html = [
-      "<!DOCTYPE html>",
-      '<html lang="ru">',
-      "<head>",
-      '<meta charset="UTF-8">',
-      '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
-      `<title>${safeTitle} — полный экран</title>`,
-      "<style>",
-      "html,body{margin:0;min-height:100%;background:#f4f7f8;font-family:DM Sans,Segoe UI,sans-serif;color:#152028}",
-      ".topbar{position:sticky;top:0;z-index:2;display:flex;gap:.75rem;align-items:center;justify-content:space-between;padding:.85rem 1.1rem;background:rgba(255,255,255,.92);border-bottom:1px solid #d7e0e6;backdrop-filter:blur(8px)}",
-      ".topbar h1{margin:0;font-size:1.05rem;font-weight:700}",
-      ".topbar button{min-height:2.3rem;padding:.4rem .9rem;border:1px solid #b8c7d0;border-radius:999px;background:#fff;font:inherit;font-weight:600;cursor:pointer}",
-      ".stage{min-height:calc(100vh - 64px);padding:1.25rem;overflow:auto}",
-      ".frame{width:max-content;min-width:100%;margin:0 auto;padding:1rem;background:#fff;border:1px solid #d7e0e6;border-radius:16px;box-shadow:0 10px 30px rgba(21,32,40,.08)}",
-      `svg{display:block;max-width:none!important;width:${width}px!important;height:${height}px!important}`,
-      "</style>",
-      "</head>",
-      "<body>",
-      '<div class="topbar">',
-      `<h1>${safeTitle}</h1>`,
-      '<button type="button" id="fs-btn">На весь экран</button>',
-      "</div>",
-      '<div class="stage"><div class="frame">',
-      svgMarkup,
-      "</div></div>",
-      "<script>",
-      'document.getElementById("fs-btn").addEventListener("click",function(){',
-      "var root=document.documentElement;",
-      "if(!document.fullscreenElement){root.requestFullscreen&&root.requestFullscreen();}",
-      "else{document.exitFullscreen&&document.exitFullscreen();}",
-      "});",
-      "</" + "script>",
-      "</body></html>",
-    ].join("");
-
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const tab = window.open(url, "_blank");
-    if (!tab) {
-      setRenderError(
-        "Браузер заблокировал новую вкладку. Разрешите всплывающие окна."
-      );
-      URL.revokeObjectURL(url);
-      return;
-    }
-    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }
-
   async function copyMermaidCode() {
     if (!lastMermaidCode) {
       setRenderError("Сначала постройте roadmap");
@@ -1166,8 +1317,8 @@
         primaryTextColor: "#152028",
         primaryBorderColor: "#0f766e",
         lineColor: "#8aa0ad",
-        sectionBkgColor: "#f3faf8",
-        altSectionBkgColor: "#ffffff",
+        sectionBkgColor: "#ebe6f7",
+        altSectionBkgColor: "#fff3d1",
         gridColor: "#d7e0e6",
         taskBkgColor: "#0f766e",
         taskBorderColor: "#084c47",
@@ -1186,6 +1337,10 @@
       themeCSS: `
         .task { stroke: #084c47 !important; stroke-width: 1.75px !important; }
         rect.task { stroke: #084c47 !important; stroke-width: 1.75px !important; }
+        .section0 { fill: #ebe6f7 !important; }
+        .section1 { fill: #ffffff !important; }
+        .section2 { fill: #fff3d1 !important; }
+        .section3 { fill: #e7f3ee !important; }
       `,
       gantt: {
         titleTopMargin: 30,
@@ -1197,7 +1352,7 @@
         gridLineStartPadding: 28,
         fontSize: 16,
         sectionFontSize: 16,
-        numberSectionStyles: 2,
+        numberSectionStyles: 4,
         useMaxWidth: false,
       },
     });
@@ -1220,8 +1375,6 @@
     els.clearAllBtn.addEventListener("click", clearAll);
     els.downloadSvgBtn.addEventListener("click", downloadSVG);
     els.downloadPngBtn.addEventListener("click", downloadPNG);
-    els.downloadMiroBtn.addEventListener("click", downloadForMiro);
-    els.fullscreenBtn.addEventListener("click", openFullscreenDiagram);
     els.copyMermaidBtn.addEventListener("click", () => {
       copyMermaidCode().catch(console.error);
     });
