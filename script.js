@@ -613,7 +613,7 @@
     });
 
     const lines = [
-      `%%{init: {"gantt": {"useWidth": ${useWidth}, "leftPadding": ${leftPadding}, "rightPadding": 40, "useMaxWidth": false, "barHeight": 18, "barGap": 6, "fontSize": 13, "sectionFontSize": 13, "topPadding": 50, "gridLineStartPadding": 22}} }%%`,
+      `%%{init: {"gantt": {"useWidth": ${useWidth}, "leftPadding": ${leftPadding}, "rightPadding": 40, "useMaxWidth": false, "barHeight": 24, "barGap": 12, "fontSize": 13, "sectionFontSize": 13, "topPadding": 50, "gridLineStartPadding": 24}} }%%`,
       "gantt",
       `    title ${safeTitle}`,
       "    dateFormat YYYY-MM-DD",
@@ -669,6 +669,7 @@
       lastMermaidCode = mermaidCode;
       fitDiagramWidth();
       emphasizeAxisDates();
+      styleTaskBars();
       return true;
     } catch (error) {
       console.error(error);
@@ -704,6 +705,35 @@
     svg.querySelectorAll(".tick text, g.grid .tick text").forEach((node) => {
       node.setAttribute("font-size", "15");
       node.setAttribute("font-weight", "600");
+    });
+  }
+
+  function styleTaskBars() {
+    const svg = els.diagramContainer.querySelector("svg");
+    if (!svg) return;
+
+    const fill = "#0f766e";
+    const stroke = "#084c47";
+
+    svg.querySelectorAll("rect").forEach((rect) => {
+      const cls = String(rect.getAttribute("class") || "");
+      const fillAttr = String(rect.getAttribute("fill") || "").toLowerCase();
+      const isTask =
+        /\btask\b/i.test(cls) ||
+        fillAttr === fill.toLowerCase() ||
+        fillAttr === "#0b5f59" ||
+        fillAttr === "#5b8a84";
+
+      if (!isTask) return;
+
+      // Keep existing fill when Mermaid already set one; only reinforce the outline.
+      if (!rect.getAttribute("fill") || fillAttr === "none") {
+        rect.setAttribute("fill", fill);
+      }
+      rect.setAttribute("stroke", stroke);
+      rect.setAttribute("stroke-width", "1.75");
+      rect.setAttribute("rx", "2");
+      rect.setAttribute("ry", "2");
     });
   }
 
@@ -1005,26 +1035,31 @@
         altSectionBkgColor: "#ffffff",
         gridColor: "#d7e0e6",
         taskBkgColor: "#0f766e",
+        taskBorderColor: "#084c47",
         taskTextColor: "#ffffff",
         taskTextLightColor: "#ffffff",
         taskTextOutsideColor: "#152028",
         taskTextDarkColor: "#152028",
         activeTaskBkgColor: "#0b5f59",
-        activeTaskBorderColor: "#084c47",
+        activeTaskBorderColor: "#063d39",
         doneTaskBkgColor: "#5b8a84",
         doneTaskBorderColor: "#3f6c67",
         critBkgColor: "#b42318",
         critBorderColor: "#912018",
         todayLineColor: "#152028",
       },
+      themeCSS: `
+        .task { stroke: #084c47 !important; stroke-width: 1.75px !important; }
+        rect.task { stroke: #084c47 !important; stroke-width: 1.75px !important; }
+      `,
       gantt: {
         titleTopMargin: 22,
-        barHeight: 18,
-        barGap: 6,
+        barHeight: 24,
+        barGap: 12,
         topPadding: 50,
         leftPadding: 200,
         rightPadding: 40,
-        gridLineStartPadding: 22,
+        gridLineStartPadding: 24,
         fontSize: 13,
         sectionFontSize: 13,
         numberSectionStyles: 2,

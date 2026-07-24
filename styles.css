@@ -525,6 +525,12 @@ button {
   font-weight: 600 !important;
 }
 
+.diagram-container svg rect.task,
+.diagram-container svg .task {
+  stroke: #084c47 !important;
+  stroke-width: 1.75px !important;
+}
+
 .footer {
   margin-top: 1.75rem;
   color: var(--ink-soft);
