@@ -243,8 +243,139 @@ button {
 
 .task-fields {
   display: grid;
-  grid-template-columns: 1.2fr 1.4fr 0.9fr 0.9fr;
+  grid-template-columns: 1.15fr 1.35fr 1.15fr;
   gap: 0.75rem;
+}
+
+.field-period .field-hint {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.date-range-trigger {
+  width: 100%;
+  min-height: 2.7rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: #fbfcfd;
+  color: var(--ink);
+  text-align: left;
+  font-weight: 500;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.date-range-trigger:hover,
+.date-range-trigger:focus {
+  outline: none;
+  border-color: var(--brand);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.16);
+}
+
+.date-range-trigger.is-placeholder {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.field.has-error .date-range-trigger {
+  border-color: var(--danger);
+  background: #fff8f7;
+}
+
+.date-range-popover {
+  position: fixed;
+  z-index: 60;
+  width: min(320px, calc(100vw - 1.5rem));
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(21, 32, 40, 0.18);
+}
+
+.date-range-popover[hidden] {
+  display: none !important;
+}
+
+.date-range-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.date-range-month {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.date-range-step {
+  margin: 0 0 0.65rem;
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+}
+
+.date-range-weekdays,
+.date-range-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.2rem;
+}
+
+.date-range-weekdays {
+  margin-bottom: 0.25rem;
+}
+
+.date-range-weekdays span {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: lowercase;
+}
+
+.date-range-grid button {
+  min-height: 2rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.date-range-grid button:hover:not(:disabled) {
+  background: var(--brand-soft);
+}
+
+.date-range-grid button:disabled {
+  color: #c0cbd3;
+}
+
+.date-range-grid button.is-outside {
+  color: #a9b6bf;
+}
+
+.date-range-grid button.is-in-range {
+  background: rgba(15, 118, 110, 0.12);
+}
+
+.date-range-grid button.is-start,
+.date-range-grid button.is-end,
+.date-range-grid button.is-start.is-end {
+  background: var(--brand);
+  color: #fff;
+}
+
+.date-range-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 .form-footer {
@@ -363,7 +494,7 @@ button {
   background: #f8fbfb;
   -webkit-overflow-scrolling: touch;
   /* Keep the page layout stable; scroll the roadmap inside this frame. */
-  max-height: min(82vh, 920px);
+  max-height: min(68vh, 640px);
 }
 
 .diagram-container {
@@ -387,9 +518,11 @@ button {
   height: auto !important;
 }
 
-.diagram-container svg line.today,
-.diagram-container svg .today {
-  stroke-width: 1.5px !important;
+/* Keep task labels readable, make X-axis dates larger. */
+.diagram-container svg .tick text,
+.diagram-container svg g.grid .tick text {
+  font-size: 15px !important;
+  font-weight: 600 !important;
 }
 
 .footer {
@@ -461,6 +594,10 @@ button {
   .task-fields {
     grid-template-columns: 1fr 1fr;
   }
+
+  .field-period {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 640px) {
@@ -478,6 +615,10 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .field-period {
+    grid-column: auto;
+  }
+
   .form-footer {
     flex-direction: column;
     align-items: stretch;
@@ -488,7 +629,7 @@ button {
   }
 
   .diagram-scroll {
-    max-height: min(72vh, 720px);
+    max-height: min(62vh, 560px);
   }
 
   .brand {

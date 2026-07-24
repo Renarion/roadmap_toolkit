@@ -78,6 +78,23 @@
     </div>
   </div>
 
+  <div class="date-range-popover" id="date-range-popover" hidden role="dialog" aria-label="Выбор периода">
+    <div class="date-range-head">
+      <button type="button" class="btn btn-tiny" id="range-prev-month" aria-label="Предыдущий месяц">‹</button>
+      <p class="date-range-month" id="range-month-label"></p>
+      <button type="button" class="btn btn-tiny" id="range-next-month" aria-label="Следующий месяц">›</button>
+    </div>
+    <p class="date-range-step" id="range-step-label">Выберите дату начала</p>
+    <div class="date-range-weekdays" aria-hidden="true">
+      <span>пн</span><span>вт</span><span>ср</span><span>чт</span><span>пт</span><span>сб</span><span>вс</span>
+    </div>
+    <div class="date-range-grid" id="range-day-grid"></div>
+    <div class="date-range-footer">
+      <button type="button" class="btn btn-ghost" id="range-clear-btn">Сбросить</button>
+      <button type="button" class="btn btn-secondary" id="range-done-btn">Готово</button>
+    </div>
+  </div>
+
   <template id="task-template">
     <article class="task-card" data-task-id="">
       <div class="task-card-top">
@@ -98,15 +115,16 @@
           <input type="text" data-field="name" placeholder="Например: Детекция аномалий" maxlength="120" autocomplete="off">
           <p class="field-error" data-error="name" hidden></p>
         </div>
-        <div class="field field-date">
-          <label>Дата начала</label>
-          <input type="date" data-field="start">
+        <div class="field field-period">
+          <label>Срок</label>
+          <button type="button" class="date-range-trigger" data-action="open-range" aria-haspopup="dialog">
+            <span data-range-label>Выберите период</span>
+          </button>
+          <input type="hidden" data-field="start" value="">
+          <input type="hidden" data-field="end" value="">
           <p class="field-error" data-error="start" hidden></p>
-        </div>
-        <div class="field field-date">
-          <label>Дата окончания</label>
-          <input type="date" data-field="end">
           <p class="field-error" data-error="end" hidden></p>
+          <p class="field-hint">Сначала дата начала, затем дата окончания</p>
         </div>
       </div>
     </article>

@@ -168,11 +168,256 @@
     if (!card) return;
     const input = card.querySelector(`[data-field="${fieldName}"]`);
     const error = card.querySelector(`[data-error="${fieldName}"]`);
-    if (input) input.closest(".field")?.classList.add("has-error");
+    const periodField = card.querySelector(".field-period");
+    if (fieldName === "start" || fieldName === "end") {
+      periodField?.classList.add("has-error");
+    } else if (input) {
+      input.closest(".field")?.classList.add("has-error");
+    }
     if (error) {
       error.hidden = false;
       error.textContent = message;
     }
+  }
+
+  function formatDisplayDate(isoDate) {
+    if (!isoDate) return "";
+    const [year, month, day] = isoDate.split("-");
+    if (!year || !month || !day) return isoDate;
+    return `${day}.${month}.${year}`;
+  }
+
+  function formatRangeLabel(start, end) {
+    if (start && end) return `${formatDisplayDate(start)} — ${formatDisplayDate(end)}`;
+    if (start) return `${formatDisplayDate(start)} — …`;
+    return "Выберите период";
+  }
+
+  function updateRangeLabel(card) {
+    const start = card.querySelector('[data-field="start"]').value;
+    const end = card.querySelector('[data-field="end"]').value;
+    const label = card.querySelector("[data-range-label]");
+    const trigger = card.querySelector("[data-action='open-range']");
+    if (!label || !trigger) return;
+    label.textContent = formatRangeLabel(start, end);
+    trigger.classList.toggle("is-placeholder", !(start && end));
+  }
+
+  const MONTH_NAMES = [
+    "Январь",
+    "Февраль",
+    "Март",
+    "Апрель",
+    "Май",
+    "Июнь",
+    "Июль",
+    "Август",
+    "Сентябрь",
+    "Октябрь",
+    "Ноябрь",
+    "Декабрь",
+  ];
+
+  const rangePicker = {
+    taskId: null,
+    viewYear: new Date().getFullYear(),
+    viewMonth: new Date().getMonth(),
+    draftStart: "",
+    draftEnd: "",
+  };
+
+  function toIsoDate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function parseIsoDate(iso) {
+    if (!iso) return null;
+    const date = new Date(`${iso}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function closeRangePicker() {
+    const popover = document.getElementById("date-range-popover");
+    if (!popover) return;
+    popover.hidden = true;
+    rangePicker.taskId = null;
+  }
+
+  function applyRangeDraftToTask() {
+    if (!rangePicker.taskId) return;
+    const card = els.tasksContainer.querySelector(
+      `[data-task-id="${rangePicker.taskId}"]`
+    );
+    if (!card) return;
+
+    let start = rangePicker.draftStart;
+    let end = rangePicker.draftEnd;
+    if (start && end && end < start) {
+      [start, end] = [end, start];
+    }
+
+    card.querySelector('[data-field="start"]').value = start;
+    card.querySelector('[data-field="end"]').value = end;
+    updateRangeLabel(card);
+    syncTaskFromDom(rangePicker.taskId);
+    saveToLocalStorage();
+  }
+
+  function renderRangeCalendar() {
+    const grid = document.getElementById("range-day-grid");
+    const monthLabel = document.getElementById("range-month-label");
+    const stepLabel = document.getElementById("range-step-label");
+    if (!grid || !monthLabel || !stepLabel) return;
+
+    monthLabel.textContent = `${MONTH_NAMES[rangePicker.viewMonth]} ${rangePicker.viewYear}`;
+    if (!rangePicker.draftStart) {
+      stepLabel.textContent = "Выберите дату начала";
+    } else if (!rangePicker.draftEnd) {
+      stepLabel.textContent = "Выберите дату окончания";
+    } else {
+      stepLabel.textContent = `${formatDisplayDate(rangePicker.draftStart)} — ${formatDisplayDate(rangePicker.draftEnd)}`;
+    }
+
+    grid.replaceChildren();
+
+    const firstOfMonth = new Date(rangePicker.viewYear, rangePicker.viewMonth, 1);
+    const startOffset = (firstOfMonth.getDay() + 6) % 7; // Monday-first
+    const gridStart = new Date(firstOfMonth);
+    gridStart.setDate(firstOfMonth.getDate() - startOffset);
+
+    let startIso = rangePicker.draftStart;
+    let endIso = rangePicker.draftEnd;
+    if (startIso && endIso && endIso < startIso) {
+      [startIso, endIso] = [endIso, startIso];
+    }
+
+    for (let i = 0; i < 42; i += 1) {
+      const day = new Date(gridStart);
+      day.setDate(gridStart.getDate() + i);
+      const iso = toIsoDate(day);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = String(day.getDate());
+      btn.dataset.date = iso;
+
+      if (day.getMonth() !== rangePicker.viewMonth) {
+        btn.classList.add("is-outside");
+      }
+      if (startIso && iso === startIso) btn.classList.add("is-start");
+      if (endIso && iso === endIso) btn.classList.add("is-end");
+      if (startIso && endIso && iso > startIso && iso < endIso) {
+        btn.classList.add("is-in-range");
+      }
+
+      btn.addEventListener("click", () => {
+        if (!rangePicker.draftStart || (rangePicker.draftStart && rangePicker.draftEnd)) {
+          rangePicker.draftStart = iso;
+          rangePicker.draftEnd = "";
+        } else {
+          rangePicker.draftEnd = iso;
+          if (rangePicker.draftEnd < rangePicker.draftStart) {
+            const tmp = rangePicker.draftStart;
+            rangePicker.draftStart = rangePicker.draftEnd;
+            rangePicker.draftEnd = tmp;
+          }
+        }
+        renderRangeCalendar();
+        if (rangePicker.draftStart && rangePicker.draftEnd) {
+          applyRangeDraftToTask();
+        }
+      });
+
+      grid.appendChild(btn);
+    }
+  }
+
+  function openRangePicker(taskId, anchor) {
+    const card = els.tasksContainer.querySelector(`[data-task-id="${taskId}"]`);
+    const popover = document.getElementById("date-range-popover");
+    if (!card || !popover) return;
+
+    const start = card.querySelector('[data-field="start"]').value;
+    const end = card.querySelector('[data-field="end"]').value;
+    rangePicker.taskId = taskId;
+    rangePicker.draftStart = start;
+    rangePicker.draftEnd = end;
+
+    const seed = parseIsoDate(start) || new Date();
+    rangePicker.viewYear = seed.getFullYear();
+    rangePicker.viewMonth = seed.getMonth();
+
+    renderRangeCalendar();
+    popover.hidden = false;
+
+    const rect = anchor.getBoundingClientRect();
+    const popWidth = popover.offsetWidth || 320;
+    const popHeight = popover.offsetHeight || 360;
+    let left = rect.left;
+    let top = rect.bottom + 8;
+    if (left + popWidth > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - popWidth - 8);
+    }
+    if (top + popHeight > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - popHeight - 8);
+    }
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
+  }
+
+  function bindRangePickerControls() {
+    const popover = document.getElementById("date-range-popover");
+    if (!popover || popover.dataset.bound === "1") return;
+    popover.dataset.bound = "1";
+
+    document.getElementById("range-prev-month")?.addEventListener("click", () => {
+      rangePicker.viewMonth -= 1;
+      if (rangePicker.viewMonth < 0) {
+        rangePicker.viewMonth = 11;
+        rangePicker.viewYear -= 1;
+      }
+      renderRangeCalendar();
+    });
+
+    document.getElementById("range-next-month")?.addEventListener("click", () => {
+      rangePicker.viewMonth += 1;
+      if (rangePicker.viewMonth > 11) {
+        rangePicker.viewMonth = 0;
+        rangePicker.viewYear += 1;
+      }
+      renderRangeCalendar();
+    });
+
+    document.getElementById("range-clear-btn")?.addEventListener("click", () => {
+      rangePicker.draftStart = "";
+      rangePicker.draftEnd = "";
+      applyRangeDraftToTask();
+      renderRangeCalendar();
+    });
+
+    document.getElementById("range-done-btn")?.addEventListener("click", () => {
+      applyRangeDraftToTask();
+      closeRangePicker();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (popover.hidden) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (popover.contains(target)) return;
+      if (target.closest("[data-action='open-range']")) return;
+      applyRangeDraftToTask();
+      closeRangePicker();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !popover.hidden) {
+        applyRangeDraftToTask();
+        closeRangePicker();
+      }
+    });
   }
 
   function syncTaskFromDom(taskId) {
@@ -191,6 +436,7 @@
   }
 
   function renderTasks() {
+    closeRangePicker();
     els.tasksContainer.replaceChildren();
 
     tasks.forEach((task, index) => {
@@ -208,10 +454,16 @@
       nameInput.value = task.name;
       startInput.value = task.start;
       endInput.value = task.end;
+      updateRangeLabel(card);
 
       card.addEventListener("input", () => {
         syncTaskFromDom(task.id);
         saveToLocalStorage();
+      });
+
+      card.querySelector('[data-action="open-range"]').addEventListener("click", (event) => {
+        event.stopPropagation();
+        openRangePicker(task.id, event.currentTarget);
       });
 
       card.querySelector('[data-action="remove"]').addEventListener("click", () => {
@@ -361,12 +613,12 @@
     });
 
     const lines = [
-      `%%{init: {"gantt": {"useWidth": ${useWidth}, "leftPadding": ${leftPadding}, "rightPadding": 40, "useMaxWidth": false, "barHeight": 42, "barGap": 16, "fontSize": 14, "sectionFontSize": 15, "topPadding": 64, "gridLineStartPadding": 36}} }%%`,
+      `%%{init: {"gantt": {"useWidth": ${useWidth}, "leftPadding": ${leftPadding}, "rightPadding": 40, "useMaxWidth": false, "barHeight": 18, "barGap": 6, "fontSize": 13, "sectionFontSize": 13, "topPadding": 50, "gridLineStartPadding": 22}} }%%`,
       "gantt",
       `    title ${safeTitle}`,
       "    dateFormat YYYY-MM-DD",
       "    axisFormat %d.%m",
-      "    todayMarker stroke-width:1.5px,stroke:#152028,opacity:0.55",
+      "    todayMarker off",
       "",
     ];
 
@@ -416,6 +668,7 @@
       holder.innerHTML = svg;
       lastMermaidCode = mermaidCode;
       fitDiagramWidth();
+      emphasizeAxisDates();
       return true;
     } catch (error) {
       console.error(error);
@@ -443,6 +696,15 @@
     svg.style.maxWidth = "none";
     svg.style.width = `${size.width}px`;
     svg.style.height = `${size.height}px`;
+  }
+
+  function emphasizeAxisDates() {
+    const svg = els.diagramContainer.querySelector("svg");
+    if (!svg) return;
+    svg.querySelectorAll(".tick text, g.grid .tick text").forEach((node) => {
+      node.setAttribute("font-size", "15");
+      node.setAttribute("font-weight", "600");
+    });
   }
 
   function measureSvgSize(svg) {
@@ -756,15 +1018,15 @@
         todayLineColor: "#152028",
       },
       gantt: {
-        titleTopMargin: 28,
-        barHeight: 42,
-        barGap: 16,
-        topPadding: 64,
+        titleTopMargin: 22,
+        barHeight: 18,
+        barGap: 6,
+        topPadding: 50,
         leftPadding: 200,
         rightPadding: 40,
-        gridLineStartPadding: 36,
-        fontSize: 14,
-        sectionFontSize: 15,
+        gridLineStartPadding: 22,
+        fontSize: 13,
+        sectionFontSize: 13,
         numberSectionStyles: 2,
         useMaxWidth: false,
       },
@@ -797,6 +1059,7 @@
   function init() {
     const ready = initMermaid();
     bindEvents();
+    bindRangePickerControls();
 
     const restored = loadFromLocalStorage();
     if (!restored) {
