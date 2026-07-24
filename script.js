@@ -81,6 +81,37 @@
       .trim();
   }
 
+  function truncateLabel(text, maxLen) {
+    const safe = sanitizeMermaidText(text);
+    if (!safe) return "";
+    if (safe.length <= maxLen) return safe;
+    return `${safe.slice(0, Math.max(1, maxLen - 1)).trimEnd()}…`;
+  }
+
+  function daysBetween(startIso, endIso) {
+    const start = new Date(`${startIso}T00:00:00`);
+    const end = new Date(`${endIso}T00:00:00`);
+    return Math.max(1, Math.round((end - start) / 86400000) + 1);
+  }
+
+  function estimateChartLayout(taskList) {
+    const labels = taskList.flatMap((task) => [
+      truncateLabel(task.category, 36),
+      truncateLabel(task.name, 40),
+    ]);
+    const longest = labels.reduce((max, label) => Math.max(max, label.length), 8);
+    const leftPadding = Math.min(420, Math.max(200, longest * 10 + 32));
+
+    const starts = taskList.map((task) => task.start).sort();
+    const ends = taskList.map((task) => task.end).sort();
+    const spanDays = daysBetween(starts[0], ends[ends.length - 1]);
+    // Wider timeline so bars and labels stay readable.
+    const pxPerDay = spanDays > 120 ? 16 : spanDays > 60 ? 22 : 28;
+    const useWidth = Math.max(1280, Math.ceil(leftPadding + spanDays * pxPerDay + 160));
+
+    return { leftPadding, useWidth };
+  }
+
   function slugifyFilename(text) {
     const base = String(text || DEFAULT_TITLE)
       .normalize("NFKD")
@@ -317,11 +348,12 @@
   }
 
   function generateMermaidCode(title, taskList) {
-    const safeTitle = sanitizeMermaidText(title) || DEFAULT_TITLE;
+    const safeTitle = truncateLabel(title, 60) || DEFAULT_TITLE;
+    const { leftPadding, useWidth } = estimateChartLayout(taskList);
     const sections = new Map();
 
     taskList.forEach((task) => {
-      const sectionName = sanitizeMermaidText(task.category) || "Без категории";
+      const sectionName = truncateLabel(task.category, 36) || "Без категории";
       if (!sections.has(sectionName)) {
         sections.set(sectionName, []);
       }
@@ -329,6 +361,7 @@
     });
 
     const lines = [
+      `%%{init: {"gantt": {"useWidth": ${useWidth}, "leftPadding": ${leftPadding}, "rightPadding": 40, "useMaxWidth": false, "barHeight": 30, "barGap": 10, "fontSize": 13, "sectionFontSize": 14, "topPadding": 55, "gridLineStartPadding": 28}} }%%`,
       "gantt",
       `    title ${safeTitle}`,
       "    dateFormat YYYY-MM-DD",
@@ -339,7 +372,7 @@
     sections.forEach((sectionTasks, sectionName) => {
       lines.push(`    section ${sectionName}`);
       sectionTasks.forEach((task) => {
-        const taskName = sanitizeMermaidText(task.name) || "Задача";
+        const taskName = truncateLabel(task.name, 40) || "Задача";
         // Mermaid end date is exclusive for day-level ranges; keep inclusive UX by adding one day.
         const endExclusive = addOneDay(task.end);
         lines.push(`    ${taskName} :${task.start}, ${endExclusive}`);
@@ -399,25 +432,81 @@
     const svg = els.diagramContainer.querySelector("svg");
     if (!svg) return;
 
-    let width = 0;
-    try {
-      width = svg.getBBox().width;
-    } catch (_) {
-      width = 0;
+    const size = measureSvgSize(svg);
+    els.diagramContainer.style.minWidth = `${size.width}px`;
+    svg.setAttribute("width", String(size.width));
+    svg.setAttribute("height", String(size.height));
+    if (!svg.getAttribute("viewBox")) {
+      svg.setAttribute("viewBox", `0 0 ${size.width} ${size.height}`);
     }
-
-    if (!width) {
-      const attrWidth = Number.parseFloat(svg.getAttribute("width") || "0");
-      width = Number.isFinite(attrWidth) ? attrWidth : 0;
-    }
-
-    const minWidth = Math.max(720, Math.ceil(width + 48));
-    els.diagramContainer.style.minWidth = `${minWidth}px`;
-    svg.removeAttribute("width");
-    svg.removeAttribute("height");
     svg.style.maxWidth = "none";
-    svg.style.width = `${minWidth}px`;
-    svg.style.height = "auto";
+    svg.style.width = `${size.width}px`;
+    svg.style.height = `${size.height}px`;
+  }
+
+  function measureSvgSize(svg) {
+    const viewBox = svg.viewBox?.baseVal;
+    if (viewBox && viewBox.width > 0 && viewBox.height > 0) {
+      return {
+        width: Math.ceil(viewBox.width),
+        height: Math.ceil(viewBox.height),
+      };
+    }
+
+    let width = 0;
+    let height = 0;
+
+    const attrWidth = Number.parseFloat(svg.getAttribute("width") || "");
+    const attrHeight = Number.parseFloat(svg.getAttribute("height") || "");
+    if (Number.isFinite(attrWidth) && attrWidth > 0) width = attrWidth;
+    if (Number.isFinite(attrHeight) && attrHeight > 0) height = attrHeight;
+
+    const styleWidth = Number.parseFloat(svg.style.width || "");
+    const styleHeight = Number.parseFloat(svg.style.height || "");
+    if (Number.isFinite(styleWidth) && styleWidth > 0) width = Math.max(width, styleWidth);
+    if (Number.isFinite(styleHeight) && styleHeight > 0) height = Math.max(height, styleHeight);
+
+    try {
+      const bbox = svg.getBBox();
+      if (bbox.width > 0) width = Math.max(width, Math.ceil(bbox.x + bbox.width + 8));
+      if (bbox.height > 0) height = Math.max(height, Math.ceil(bbox.y + bbox.height + 8));
+    } catch (_) {
+      /* ignore */
+    }
+
+    return {
+      width: Math.ceil(Math.max(width, 1100)),
+      height: Math.ceil(Math.max(height, 240)),
+    };
+  }
+
+  function prepareExportSvg(svg) {
+    const size = measureSvgSize(svg);
+    const clone = svg.cloneNode(true);
+    const originalViewBox = svg.getAttribute("viewBox");
+
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+    clone.setAttribute("width", String(size.width));
+    clone.setAttribute("height", String(size.height));
+    clone.setAttribute(
+      "viewBox",
+      originalViewBox || `0 0 ${size.width} ${size.height}`
+    );
+    clone.removeAttribute("style");
+    clone.style.cssText = `width:${size.width}px;height:${size.height}px;max-width:none;background:#ffffff;`;
+
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("x", "0");
+    bg.setAttribute("y", "0");
+    bg.setAttribute("width", String(size.width));
+    bg.setAttribute("height", String(size.height));
+    bg.setAttribute("fill", "#ffffff");
+    clone.insertBefore(bg, clone.firstChild);
+
+    const serializer = new XMLSerializer();
+    const source = `<?xml version="1.0" encoding="UTF-8"?>\n${serializer.serializeToString(clone)}`;
+    return { source, width: size.width, height: size.height };
   }
 
   async function handleBuild() {
@@ -448,19 +537,6 @@
     return els.diagramContainer.querySelector("svg");
   }
 
-  function serializeSvg(svg) {
-    const clone = svg.cloneNode(true);
-    if (!clone.getAttribute("xmlns")) {
-      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    }
-    if (!clone.getAttribute("xmlns:xlink")) {
-      clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
-    }
-
-    const serializer = new XMLSerializer();
-    return `<?xml version="1.0" encoding="UTF-8"?>\n${serializer.serializeToString(clone)}`;
-  }
-
   function triggerDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -481,7 +557,7 @@
 
     const title = els.title.value.trim() || DEFAULT_TITLE;
     const filename = `${slugifyFilename(title)}-roadmap.svg`;
-    const source = serializeSvg(svg);
+    const { source } = prepareExportSvg(svg);
     const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
     triggerDownload(blob, filename);
   }
@@ -495,7 +571,7 @@
 
     const title = els.title.value.trim() || DEFAULT_TITLE;
     const filename = `${slugifyFilename(title)}-roadmap.png`;
-    const source = serializeSvg(svg);
+    const { source, width, height } = prepareExportSvg(svg);
     const svgBlob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(svgBlob);
 
@@ -503,16 +579,16 @@
     image.onload = () => {
       try {
         const scale = 2;
-        const width = Math.max(1, image.naturalWidth || svg.clientWidth || 1200);
-        const height = Math.max(1, image.naturalHeight || svg.clientHeight || 600);
+        const exportWidth = Math.max(1, width, image.naturalWidth || 0);
+        const exportHeight = Math.max(1, height, image.naturalHeight || 0);
         const canvas = document.createElement("canvas");
-        canvas.width = Math.round(width * scale);
-        canvas.height = Math.round(height * scale);
+        canvas.width = Math.round(exportWidth * scale);
+        canvas.height = Math.round(exportHeight * scale);
         const ctx = canvas.getContext("2d");
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.setTransform(scale, 0, 0, scale, 0, 0);
-        ctx.drawImage(image, 0, 0);
+        ctx.drawImage(image, 0, 0, exportWidth, exportHeight);
 
         canvas.toBlob((blob) => {
           URL.revokeObjectURL(url);
@@ -680,14 +756,16 @@
       },
       gantt: {
         titleTopMargin: 24,
-        barHeight: 28,
-        barGap: 8,
-        topPadding: 50,
-        leftPadding: 90,
-        gridLineStartPadding: 24,
+        barHeight: 30,
+        barGap: 10,
+        topPadding: 55,
+        leftPadding: 200,
+        rightPadding: 40,
+        gridLineStartPadding: 28,
         fontSize: 13,
         sectionFontSize: 14,
         numberSectionStyles: 2,
+        useMaxWidth: false,
       },
     });
 
