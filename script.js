@@ -361,11 +361,12 @@
     });
 
     const lines = [
-      `%%{init: {"gantt": {"useWidth": ${useWidth}, "leftPadding": ${leftPadding}, "rightPadding": 40, "useMaxWidth": false, "barHeight": 30, "barGap": 10, "fontSize": 13, "sectionFontSize": 14, "topPadding": 55, "gridLineStartPadding": 28}} }%%`,
+      `%%{init: {"gantt": {"useWidth": ${useWidth}, "leftPadding": ${leftPadding}, "rightPadding": 40, "useMaxWidth": false, "barHeight": 42, "barGap": 16, "fontSize": 14, "sectionFontSize": 15, "topPadding": 64, "gridLineStartPadding": 36}} }%%`,
       "gantt",
       `    title ${safeTitle}`,
       "    dateFormat YYYY-MM-DD",
       "    axisFormat %d.%m",
+      "    todayMarker stroke-width:1.5px,stroke:#152028,opacity:0.55",
       "",
     ];
 
@@ -755,15 +756,15 @@
         todayLineColor: "#152028",
       },
       gantt: {
-        titleTopMargin: 24,
-        barHeight: 30,
-        barGap: 10,
-        topPadding: 55,
+        titleTopMargin: 28,
+        barHeight: 42,
+        barGap: 16,
+        topPadding: 64,
         leftPadding: 200,
         rightPadding: 40,
-        gridLineStartPadding: 28,
-        fontSize: 13,
-        sectionFontSize: 14,
+        gridLineStartPadding: 36,
+        fontSize: 14,
+        sectionFontSize: 15,
         numberSectionStyles: 2,
         useMaxWidth: false,
       },

@@ -363,7 +363,7 @@ button {
   background: #f8fbfb;
   -webkit-overflow-scrolling: touch;
   /* Keep the page layout stable; scroll the roadmap inside this frame. */
-  max-height: min(70vh, 720px);
+  max-height: min(82vh, 920px);
 }
 
 .diagram-container {
@@ -385,6 +385,11 @@ button {
   display: block;
   max-width: none !important;
   height: auto !important;
+}
+
+.diagram-container svg line.today,
+.diagram-container svg .today {
+  stroke-width: 1.5px !important;
 }
 
 .footer {
@@ -483,7 +488,7 @@ button {
   }
 
   .diagram-scroll {
-    max-height: min(60vh, 520px);
+    max-height: min(72vh, 720px);
   }
 
   .brand {
