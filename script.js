@@ -113,42 +113,49 @@
     return Math.max(1, Math.round((end - start) / 86400000) + 1);
   }
 
+  function getTimelineSpanDays(taskList) {
+    const starts = taskList.map((task) => task.start).filter(Boolean).sort();
+    const ends = taskList.map((task) => task.end).filter(Boolean).sort();
+    if (!starts.length || !ends.length) return 30;
+
+    const span = daysBetween(starts[0], ends[ends.length - 1]);
+    // Mermaid adds a little padding on the axis; reserve room for extra ticks.
+    return Math.max(span + 4, 7);
+  }
+
+  function pickTickInterval(spanDays) {
+    if (spanDays <= 21) return "1day";
+    if (spanDays <= 90) return "1week";
+    if (spanDays <= 210) return "2week";
+    return "1month";
+  }
+
+  function getMinPxPerDay(spanDays, tickInterval) {
+    if (tickInterval === "1day") {
+      return spanDays <= 14 ? 56 : 48;
+    }
+    if (tickInterval === "1week") return 20;
+    if (tickInterval === "2week") return 14;
+    return 10;
+  }
+
   function estimateChartLayout(taskList) {
     const labels = taskList.flatMap((task) => [
       truncateLabel(task.category, 36),
       truncateLabel(task.name, 40),
     ]);
     const longest = labels.reduce((max, label) => Math.max(max, label.length), 8);
-    // More room for larger section/task labels.
     const leftPadding = Math.min(460, Math.max(220, longest * 11 + 36));
+    const rightPadding = 40;
 
-    const starts = taskList.map((task) => task.start).sort();
-    const ends = taskList.map((task) => task.end).sort();
-    const spanDays = daysBetween(starts[0], ends[ends.length - 1]);
+    const spanDays = getTimelineSpanDays(taskList);
+    const tickInterval = pickTickInterval(spanDays);
+    const minPxPerDay = getMinPxPerDay(spanDays, tickInterval);
+    const timelineWidth = Math.ceil(spanDays * minPxPerDay);
+    const contentWidth = Math.ceil(leftPadding + timelineWidth + rightPadding);
+    const useWidth = Math.max(contentWidth, 640);
 
-    const scrollEl = document.getElementById("diagram-scroll");
-    const pageBudget = Math.min(window.innerWidth - 32, 1560);
-    const available = Math.max(
-      1180,
-      (scrollEl?.clientWidth || 0) - 4,
-      pageBudget - 48
-    );
-
-    // Fit the timeline into the visible width to reduce horizontal scrolling.
-    const timelineBudget = Math.max(820, available - leftPadding - 32);
-    let pxPerDay;
-    if (spanDays <= 100) {
-      pxPerDay = Math.min(16, Math.max(10, timelineBudget / spanDays));
-    } else if (spanDays <= 180) {
-      pxPerDay = Math.min(13, Math.max(8, timelineBudget / spanDays));
-    } else {
-      pxPerDay = Math.min(10, Math.max(6, timelineBudget / spanDays));
-    }
-
-    const contentWidth = Math.ceil(leftPadding + spanDays * pxPerDay + 32);
-    const useWidth = Math.min(available, contentWidth);
-
-    return { leftPadding, useWidth };
+    return { leftPadding, useWidth, tickInterval };
   }
 
   function slugifyFilename(text) {
@@ -725,7 +732,7 @@
 
   function generateMermaidCode(title, taskList) {
     const safeTitle = truncateLabel(title, 60) || DEFAULT_TITLE;
-    const { leftPadding, useWidth } = estimateChartLayout(taskList);
+    const { leftPadding, useWidth, tickInterval } = estimateChartLayout(taskList);
     const sections = new Map();
 
     taskList.forEach((task) => {
@@ -742,6 +749,7 @@
       `    title ${safeTitle}`,
       "    dateFormat YYYY-MM-DD",
       "    axisFormat %d.%m",
+      `    tickInterval ${tickInterval}`,
       "    todayMarker off",
       "",
     ];
@@ -866,6 +874,7 @@
         lower.startsWith("dateformat") ||
         lower.startsWith("axisformat") ||
         lower.startsWith("todaymarker") ||
+        lower.startsWith("tickinterval") ||
         lower.startsWith("excludes") ||
         lower.startsWith("inclusiveenddates")
       ) {
@@ -961,7 +970,10 @@
     showLoader(true);
     await wait(LOADER_MS);
 
-    const ok = await renderRoadmap(code);
+    const renderCode = parsed.tasks.length
+      ? generateMermaidCode(parsed.title, tasks)
+      : code;
+    const ok = await renderRoadmap(renderCode);
     showLoader(false);
 
     if (!ok) return;
@@ -995,6 +1007,7 @@
       holder.innerHTML = svg;
       lastMermaidCode = mermaidCode;
       emphasizeAxisDates();
+      optimizeAxisTicks();
       emphasizeDiagramText();
       styleTaskBars();
       colorSectionBands();
@@ -1035,6 +1048,40 @@
     svg.querySelectorAll(".tick text, g.grid .tick text").forEach((node) => {
       node.setAttribute("font-size", "16");
       node.setAttribute("font-weight", "600");
+    });
+  }
+
+  function optimizeAxisTicks() {
+    const svg = els.diagramContainer.querySelector("svg");
+    if (!svg) return;
+
+    const ticks = [...svg.querySelectorAll("g.tick text, .grid .tick text, .tick text")]
+      .map((node) => ({
+        node,
+        x: Number(node.getAttribute("x") || 0),
+        text: (node.textContent || "").trim(),
+      }))
+      .filter((tick) => tick.text && Number.isFinite(tick.x))
+      .sort((a, b) => a.x - b.x);
+
+    if (ticks.length < 2) return;
+
+    const MIN_GAP = 52;
+    let lastVisibleX = ticks[0].x;
+
+    ticks.forEach((tick, index) => {
+      if (index === 0 || index === ticks.length - 1) {
+        lastVisibleX = tick.x;
+        return;
+      }
+
+      if (tick.x - lastVisibleX < MIN_GAP) {
+        tick.node.setAttribute("display", "none");
+        const tickGroup = tick.node.closest("g.tick");
+        tickGroup?.querySelector("line")?.setAttribute("display", "none");
+      } else {
+        lastVisibleX = tick.x;
+      }
     });
   }
 
@@ -1328,6 +1375,23 @@
 
       const raw = (label.textContent || "").replace(/\s+/g, " ").trim();
       if (!raw) return;
+
+      if (w < 80) {
+        const compact =
+          raw.length > 10 ? `${raw.slice(0, 9).trimEnd()}…` : raw;
+        while (label.firstChild) label.removeChild(label.firstChild);
+        label.setAttribute("class", "taskText");
+        label.setAttribute("text-anchor", "middle");
+        label.setAttribute("dominant-baseline", "central");
+        label.setAttribute("font-size", "12");
+        label.setAttribute("font-weight", String(FONT_WEIGHT));
+        label.setAttribute("fill", "#ffffff");
+        label.setAttribute("x", String(cx));
+        label.setAttribute("y", String(y + h / 2));
+        label.textContent = compact;
+        label.dataset.wrapped = "1";
+        return;
+      }
 
       const maxWidth = Math.max(36, w - PAD_X * 2);
       const lines = wrapWordsToWidth(svg, raw, maxWidth, FONT_SIZE, FONT_WEIGHT);
