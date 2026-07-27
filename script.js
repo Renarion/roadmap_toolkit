@@ -113,6 +113,24 @@
     return Math.max(1, Math.round((end - start) / 86400000) + 1);
   }
 
+  function getMinTimelineWidth(spanDays) {
+    const MIN_TICK_GAP = 52;
+    let tickCount;
+
+    // Mermaid uses daily ticks on short ranges and weekly+ on longer ones.
+    if (spanDays <= 45) {
+      tickCount = Math.max(spanDays + 4, 7);
+    } else if (spanDays <= 120) {
+      tickCount = Math.ceil(spanDays / 7) + 2;
+    } else if (spanDays <= 210) {
+      tickCount = Math.ceil(spanDays / 14) + 2;
+    } else {
+      tickCount = Math.ceil(spanDays / 30) + 2;
+    }
+
+    return tickCount * MIN_TICK_GAP;
+  }
+
   function estimateChartLayout(taskList) {
     const labels = taskList.flatMap((task) => [
       truncateLabel(task.category, 36),
@@ -137,17 +155,7 @@
       pageBudget - 48
     );
 
-    // Short timelines need extra width so daily labels do not overlap.
-    if (spanDays <= 21) {
-      const paddedSpan = Math.max(spanDays + 4, 7);
-      const minPxPerDay = spanDays <= 14 ? 56 : 48;
-      const timelineWidth = Math.ceil(paddedSpan * minPxPerDay);
-      const contentWidth = Math.ceil(leftPadding + timelineWidth + rightPadding);
-      const useWidth = Math.max(contentWidth, 640);
-      return { leftPadding, useWidth };
-    }
-
-    // Longer timelines: fit into the visible width (Mermaid picks sensible weekly ticks).
+    const minTimelineWidth = getMinTimelineWidth(spanDays);
     const timelineBudget = Math.max(820, available - leftPadding - rightPadding);
     let pxPerDay;
     if (spanDays <= 100) {
@@ -158,8 +166,13 @@
       pxPerDay = Math.min(10, Math.max(6, timelineBudget / spanDays));
     }
 
-    const contentWidth = Math.ceil(leftPadding + spanDays * pxPerDay + rightPadding);
-    const useWidth = Math.min(available, contentWidth);
+    const fittedTimelineWidth = spanDays * pxPerDay;
+    const timelineWidth = Math.max(minTimelineWidth, fittedTimelineWidth);
+    const readableWidth = Math.ceil(leftPadding + timelineWidth + rightPadding);
+    const fittedWidth = Math.ceil(leftPadding + fittedTimelineWidth + rightPadding);
+
+    // Keep axis labels readable; scroll horizontally when the timeline needs more space.
+    const useWidth = Math.max(readableWidth, Math.min(available, fittedWidth), 640);
 
     return { leftPadding, useWidth };
   }
@@ -761,7 +774,9 @@
 
     sections.forEach((sectionTasks, sectionName) => {
       lines.push(`    section ${sectionName}`);
-      sectionTasks.forEach((task) => {
+      [...sectionTasks]
+        .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end))
+        .forEach((task) => {
         const taskName = truncateLabel(task.name, 40) || "Задача";
         // Mermaid end date is exclusive for day-level ranges; keep inclusive UX by adding one day.
         const endExclusive = addOneDay(task.end);
@@ -1251,55 +1266,78 @@
     return lines;
   }
 
-  function shiftSvgBelow(svg, fromY, delta) {
-    if (delta <= 0) return;
+  function fitLabelLinesInBar(svg, text, maxWidth, maxHeight, fontWeight) {
+    const MIN_FONT = 11;
+    const MAX_FONT = 15;
+    const lineHeightFor = (fontSize) => Math.max(12, fontSize + 2);
 
-    svg.querySelectorAll("*").forEach((node) => {
-      ["y", "y1", "y2"].forEach((attr) => {
-        if (!node.hasAttribute(attr)) return;
-        const value = Number(node.getAttribute(attr));
-        if (Number.isFinite(value) && value >= fromY - 0.01) {
-          node.setAttribute(attr, String(value + delta));
-        }
-      });
+    for (let fontSize = MAX_FONT; fontSize >= MIN_FONT; fontSize -= 1) {
+      const lineHeight = lineHeightFor(fontSize);
+      const maxLines = Math.max(1, Math.floor((maxHeight - 6) / lineHeight));
+      let lines = wrapWordsToWidth(svg, text, maxWidth, fontSize, fontWeight);
 
-      const transform = node.getAttribute("transform");
-      if (transform && /translate\(/i.test(transform)) {
-        node.setAttribute(
-          "transform",
-          transform.replace(/translate\(([^,]+),\s*([^)]+)\)/i, (_, x, y) => {
-            const ty = Number(y);
-            if (!Number.isFinite(ty) || ty < fromY - 0.01) {
-              return `translate(${x}, ${y})`;
-            }
-            return `translate(${x}, ${ty + delta})`;
-          })
-        );
+      if (lines.length <= maxLines) {
+        return { lines, fontSize, lineHeight };
       }
-    });
+
+      if (fontSize === MIN_FONT) {
+        lines = lines.slice(0, maxLines);
+        let lastLine = lines[maxLines - 1] || "";
+        while (lastLine.length > 1) {
+          const candidate = `${lastLine.trimEnd()}…`;
+          if (measureTextWidth(svg, candidate, fontSize, fontWeight) <= maxWidth) {
+            lines[maxLines - 1] = candidate;
+            break;
+          }
+          lastLine = lastLine.slice(0, -1).trimEnd();
+        }
+        return { lines, fontSize, lineHeight };
+      }
+    }
+
+    return {
+      lines: [text.slice(0, Math.max(1, text.length - 1)).trimEnd() + "…"],
+      fontSize: MIN_FONT,
+      lineHeight: lineHeightFor(MIN_FONT),
+    };
   }
 
-  function growSectionAround(svg, barY, extra) {
-    if (extra <= 0) return;
-    svg.querySelectorAll("rect").forEach((rect) => {
-      if (isTaskRect(rect)) return;
-      const y = Number(rect.getAttribute("y") || 0);
-      const h = Number(rect.getAttribute("height") || 0);
-      if (!Number.isFinite(y) || !Number.isFinite(h)) return;
-      if (y <= barY + 1 && y + h >= barY + 4) {
-        rect.setAttribute("height", String(h + extra));
-      }
+  function applyBarLabel(label, rect, lines, fontSize, lineHeight, fontWeight) {
+    const x = Number(rect.getAttribute("x") || 0);
+    const y = Number(rect.getAttribute("y") || 0);
+    const w = Number(rect.getAttribute("width") || 0);
+    const h = Number(rect.getAttribute("height") || 0);
+    const cx = x + w / 2;
+
+    while (label.firstChild) label.removeChild(label.firstChild);
+    label.setAttribute("class", "taskText");
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("dominant-baseline", "central");
+    label.setAttribute("font-size", String(fontSize));
+    label.setAttribute("font-weight", String(fontWeight));
+    label.setAttribute("fill", "#ffffff");
+    label.setAttribute("x", String(cx));
+
+    const blockHeight = (lines.length - 1) * lineHeight;
+    const firstY = y + h / 2 - blockHeight / 2;
+    label.setAttribute("y", String(firstY));
+
+    lines.forEach((line, index) => {
+      const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+      tspan.setAttribute("x", String(cx));
+      tspan.setAttribute("y", String(firstY + index * lineHeight));
+      tspan.textContent = line;
+      label.appendChild(tspan);
     });
+
+    label.dataset.wrapped = "1";
   }
 
   function wrapTaskBarLabels() {
     const svg = els.diagramContainer.querySelector("svg");
     if (!svg) return;
 
-    const LINE_HEIGHT = 17;
     const PAD_X = 12;
-    const PAD_Y = 10;
-    const FONT_SIZE = 15;
     const FONT_WEIGHT = 600;
 
     const bars = [...svg.querySelectorAll("rect")]
@@ -1346,70 +1384,10 @@
       const raw = (label.textContent || "").replace(/\s+/g, " ").trim();
       if (!raw) return;
 
-      if (w < 80) {
-        const compact =
-          raw.length > 10 ? `${raw.slice(0, 9).trimEnd()}…` : raw;
-        while (label.firstChild) label.removeChild(label.firstChild);
-        label.setAttribute("class", "taskText");
-        label.setAttribute("text-anchor", "middle");
-        label.setAttribute("dominant-baseline", "central");
-        label.setAttribute("font-size", "12");
-        label.setAttribute("font-weight", String(FONT_WEIGHT));
-        label.setAttribute("fill", "#ffffff");
-        label.setAttribute("x", String(cx));
-        label.setAttribute("y", String(y + h / 2));
-        label.textContent = compact;
-        label.dataset.wrapped = "1";
-        return;
-      }
-
-      const maxWidth = Math.max(36, w - PAD_X * 2);
-      const lines = wrapWordsToWidth(svg, raw, maxWidth, FONT_SIZE, FONT_WEIGHT);
-      const newH = Math.max(h, lines.length * LINE_HEIGHT + PAD_Y);
-      const extra = newH - h;
-
-      if (extra > 0) {
-        // Push everything under this bar, then expand the bar itself.
-        shiftSvgBelow(svg, y + h - 0.05, extra);
-        growSectionAround(svg, y, extra);
-        rect.setAttribute("height", String(newH));
-      }
-
-      while (label.firstChild) label.removeChild(label.firstChild);
-      label.setAttribute("class", "taskText");
-      label.setAttribute("text-anchor", "middle");
-      label.setAttribute("dominant-baseline", "central");
-      label.setAttribute("font-size", String(FONT_SIZE));
-      label.setAttribute("font-weight", String(FONT_WEIGHT));
-      label.setAttribute("fill", "#ffffff");
-      label.setAttribute("x", String(cx));
-
-      const blockHeight = (lines.length - 1) * LINE_HEIGHT;
-      const firstY = y + newH / 2 - blockHeight / 2;
-      label.setAttribute("y", String(firstY));
-
-      lines.forEach((line, index) => {
-        const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
-        tspan.setAttribute("x", String(cx));
-        tspan.setAttribute("y", String(firstY + index * LINE_HEIGHT));
-        tspan.textContent = line;
-        label.appendChild(tspan);
-      });
-
-      label.dataset.wrapped = "1";
+      const maxWidth = Math.max(28, w - PAD_X * 2);
+      const fitted = fitLabelLinesInBar(svg, raw, maxWidth, h, FONT_WEIGHT);
+      applyBarLabel(label, rect, fitted.lines, fitted.fontSize, fitted.lineHeight, FONT_WEIGHT);
     });
-
-    // Grow SVG canvas after vertical expansions.
-    try {
-      const bbox = svg.getBBox();
-      const width = Math.ceil(Math.max(bbox.x + bbox.width, Number(svg.getAttribute("width") || 0)));
-      const height = Math.ceil(Math.max(bbox.y + bbox.height + 12, Number(svg.getAttribute("height") || 0)));
-      svg.setAttribute("width", String(width));
-      svg.setAttribute("height", String(height));
-      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    } catch (_) {
-      /* ignore */
-    }
   }
 
   function measureSvgSize(svg) {
