@@ -62,26 +62,17 @@ Task bar outlines are additionally styled in `styleTaskBars()`.
 
 ### 3. Category backgrounds on the diagram
 
-Edit `script.js`:
+Edit `script.js` → `SECTION_BRAND` and gradient stops in `ensureSectionGradients()`:
 
 ```js
-const SECTION_PALETTE = [
-  "#d8c8f4", // category 1
-  "#ffffff", // category 2
-  "#ffe39a", // category 3
-  "#c6e8d4", // category 4
-  "#cfe3fb", // category 5
-  "#f7dcc8", // category 6
-];
+const SECTION_BRAND = {
+  strong: "#0f766e", // --brand
+  soft: "#d8f3ef",   // --brand-soft
+  deep: "#0b5f59",   // --brand-deep
+};
 ```
 
-This palette is used in three places:
-
-| Location | Purpose |
-|----------|---------|
-| `colorSectionBands()` | paints row backgrounds after render |
-| `initMermaid()` → `themeVariables` | Mermaid default section colors |
-| `initMermaid()` → `themeCSS` | `.section0` … `.section3` classes |
+Gradients are applied after render in `colorSectionBands()`. Mermaid fallback colors live in `initMermaid()` → `themeVariables` / `themeCSS`.
 
 After changing colors, rebuild the diagram in the browser.
 

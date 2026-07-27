@@ -5,15 +5,12 @@
   const LOADER_MS = 450;
   const DEFAULT_TITLE = "Roadmap";
 
-  // Category row backgrounds on the Gantt chart (edit here).
-  const SECTION_PALETTE = [
-    "#d8c8f4",
-    "#ffffff",
-    "#ffe39a",
-    "#c6e8d4",
-    "#cfe3fb",
-    "#f7dcc8",
-  ];
+  // Category row backgrounds — brand teal gradient (see colorSectionBands()).
+  const SECTION_BRAND = {
+    strong: "#0f766e",
+    soft: "#d8f3ef",
+    deep: "#0b5f59",
+  };
 
   // Task bar colors on the Gantt chart (edit here).
   const CHART_COLORS = {
@@ -304,6 +301,25 @@
     saveToLocalStorage();
   }
 
+  function handleRangeDaySelect(iso, event) {
+    event.stopPropagation();
+
+    if (!rangePicker.draftStart || (rangePicker.draftStart && rangePicker.draftEnd)) {
+      rangePicker.draftStart = iso;
+      rangePicker.draftEnd = "";
+    } else {
+      rangePicker.draftEnd = iso;
+      if (rangePicker.draftEnd < rangePicker.draftStart) {
+        const tmp = rangePicker.draftStart;
+        rangePicker.draftStart = rangePicker.draftEnd;
+        rangePicker.draftEnd = tmp;
+      }
+    }
+
+    applyRangeDraftToTask();
+    renderRangeCalendar();
+  }
+
   function renderRangeCalendar() {
     const grid = document.getElementById("range-day-grid");
     const monthLabel = document.getElementById("range-month-label");
@@ -350,22 +366,8 @@
         btn.classList.add("is-in-range");
       }
 
-      btn.addEventListener("click", () => {
-        if (!rangePicker.draftStart || (rangePicker.draftStart && rangePicker.draftEnd)) {
-          rangePicker.draftStart = iso;
-          rangePicker.draftEnd = "";
-        } else {
-          rangePicker.draftEnd = iso;
-          if (rangePicker.draftEnd < rangePicker.draftStart) {
-            const tmp = rangePicker.draftStart;
-            rangePicker.draftStart = rangePicker.draftEnd;
-            rangePicker.draftEnd = tmp;
-          }
-        }
-        renderRangeCalendar();
-        if (rangePicker.draftStart && rangePicker.draftEnd) {
-          applyRangeDraftToTask();
-        }
+      btn.addEventListener("click", (event) => {
+        handleRangeDaySelect(iso, event);
       });
 
       grid.appendChild(btn);
@@ -410,7 +412,12 @@
     if (!popover || popover.dataset.bound === "1") return;
     popover.dataset.bound = "1";
 
-    document.getElementById("range-prev-month")?.addEventListener("click", () => {
+    popover.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+
+    document.getElementById("range-prev-month")?.addEventListener("click", (event) => {
+      event.stopPropagation();
       rangePicker.viewMonth -= 1;
       if (rangePicker.viewMonth < 0) {
         rangePicker.viewMonth = 11;
@@ -419,7 +426,8 @@
       renderRangeCalendar();
     });
 
-    document.getElementById("range-next-month")?.addEventListener("click", () => {
+    document.getElementById("range-next-month")?.addEventListener("click", (event) => {
+      event.stopPropagation();
       rangePicker.viewMonth += 1;
       if (rangePicker.viewMonth > 11) {
         rangePicker.viewMonth = 0;
@@ -428,14 +436,16 @@
       renderRangeCalendar();
     });
 
-    document.getElementById("range-clear-btn")?.addEventListener("click", () => {
+    document.getElementById("range-clear-btn")?.addEventListener("click", (event) => {
+      event.stopPropagation();
       rangePicker.draftStart = "";
       rangePicker.draftEnd = "";
       applyRangeDraftToTask();
       renderRangeCalendar();
     });
 
-    document.getElementById("range-done-btn")?.addEventListener("click", () => {
+    document.getElementById("range-done-btn")?.addEventListener("click", (event) => {
+      event.stopPropagation();
       applyRangeDraftToTask();
       closeRangePicker();
     });
@@ -810,21 +820,24 @@
     const svg = els.diagramContainer.querySelector("svg");
     if (!svg) return;
 
-    const palette = SECTION_PALETTE;
+    const gradientIds = ensureSectionGradients(svg);
     const sectionRects = [...svg.querySelectorAll("rect")].filter((rect) => {
       const cls = String(rect.getAttribute("class") || "");
       return /section/i.test(cls) && !isTaskRect(rect);
     });
 
-    if (sectionRects.length) {
-      sectionRects.forEach((rect, index) => {
-        rect.setAttribute("fill", palette[index % palette.length]);
+    const paint = (rects) => {
+      rects.forEach((rect, index) => {
+        rect.setAttribute("fill", `url(#${gradientIds[index % gradientIds.length]})`);
         rect.setAttribute("stroke", "none");
       });
+    };
+
+    if (sectionRects.length) {
+      paint(sectionRects);
       return;
     }
 
-    // Fallback: large background strips behind tasks (non-task wide rects).
     const candidates = [...svg.querySelectorAll("rect")].filter((rect) => {
       if (isTaskRect(rect)) return false;
       const width = Number(rect.getAttribute("width") || 0);
@@ -832,12 +845,63 @@
       return width > 200 && height > 20;
     });
 
-    candidates
-      .sort((a, b) => Number(a.getAttribute("y") || 0) - Number(b.getAttribute("y") || 0))
-      .forEach((rect, index) => {
-        rect.setAttribute("fill", palette[index % palette.length]);
-        rect.setAttribute("stroke", "none");
+    paint(
+      candidates.sort(
+        (a, b) => Number(a.getAttribute("y") || 0) - Number(b.getAttribute("y") || 0)
+      )
+    );
+  }
+
+  function ensureSectionGradients(svg) {
+    const NS = "http://www.w3.org/2000/svg";
+    let defs = svg.querySelector("defs");
+    if (!defs) {
+      defs = document.createElementNS(NS, "defs");
+      svg.insertBefore(defs, svg.firstChild);
+    }
+
+    defs.querySelectorAll("[id^='rt-section-grad-']").forEach((node) => node.remove());
+
+    const variants = [
+      [
+        { color: SECTION_BRAND.strong, opacity: 0.24 },
+        { color: SECTION_BRAND.soft, opacity: 0.1 },
+      ],
+      [
+        { color: SECTION_BRAND.soft, opacity: 0.55 },
+        { color: "#ffffff", opacity: 0.12 },
+      ],
+      [
+        { color: SECTION_BRAND.deep, opacity: 0.16 },
+        { color: SECTION_BRAND.soft, opacity: 0.28 },
+      ],
+    ];
+
+    const ids = [];
+
+    variants.forEach((stops, index) => {
+      const id = `rt-section-grad-${index}`;
+      ids.push(id);
+
+      const gradient = document.createElementNS(NS, "linearGradient");
+      gradient.setAttribute("id", id);
+      gradient.setAttribute("x1", "0");
+      gradient.setAttribute("y1", "0");
+      gradient.setAttribute("x2", "0");
+      gradient.setAttribute("y2", "1");
+
+      stops.forEach((stop, stopIndex) => {
+        const stopEl = document.createElementNS(NS, "stop");
+        stopEl.setAttribute("offset", stopIndex === 0 ? "0%" : "100%");
+        stopEl.setAttribute("stop-color", stop.color);
+        stopEl.setAttribute("stop-opacity", String(stop.opacity));
+        gradient.appendChild(stopEl);
       });
+
+      defs.appendChild(gradient);
+    });
+
+    return ids;
   }
 
   function measureTextWidth(svg, text, fontSize, fontWeight) {
@@ -1333,8 +1397,8 @@
         primaryTextColor: "#152028",
         primaryBorderColor: CHART_COLORS.taskFill,
         lineColor: CHART_COLORS.axis,
-        sectionBkgColor: SECTION_PALETTE[0],
-        altSectionBkgColor: SECTION_PALETTE[2],
+        sectionBkgColor: "rgba(15, 118, 110, 0.14)",
+        altSectionBkgColor: "rgba(216, 243, 239, 0.45)",
         gridColor: CHART_COLORS.grid,
         taskBkgColor: CHART_COLORS.taskFill,
         taskBorderColor: CHART_COLORS.taskStroke,
@@ -1353,10 +1417,10 @@
       themeCSS: `
         .task { stroke: ${CHART_COLORS.taskStroke} !important; stroke-width: 1.75px !important; }
         rect.task { stroke: ${CHART_COLORS.taskStroke} !important; stroke-width: 1.75px !important; }
-        .section0 { fill: ${SECTION_PALETTE[0]} !important; }
-        .section1 { fill: ${SECTION_PALETTE[1]} !important; }
-        .section2 { fill: ${SECTION_PALETTE[2]} !important; }
-        .section3 { fill: ${SECTION_PALETTE[3]} !important; }
+        .section0 { fill: rgba(15, 118, 110, 0.14) !important; }
+        .section1 { fill: rgba(216, 243, 239, 0.45) !important; }
+        .section2 { fill: rgba(11, 95, 89, 0.12) !important; }
+        .section3 { fill: rgba(232, 241, 239, 0.7) !important; }
       `,
       gantt: {
         titleTopMargin: 30,
