@@ -936,16 +936,16 @@
 
     const variants = [
       [
-        { color: SECTION_BRAND.strong, opacity: 0.24 },
-        { color: SECTION_BRAND.soft, opacity: 0.25 },
+        { color: SECTION_BRAND.strong, opacity: 0.38 },
+        { color: SECTION_BRAND.soft, opacity: 0.22 },
       ],
       [
-        { color: SECTION_BRAND.soft, opacity: 0.55 },
-        { color: "#ffffff", opacity: 0.12 },
+        { color: SECTION_BRAND.soft, opacity: 0.78 },
+        { color: "#ffffff", opacity: 0.08 },
       ],
       [
-        { color: SECTION_BRAND.deep, opacity: 0.16 },
-        { color: SECTION_BRAND.soft, opacity: 0.28 },
+        { color: SECTION_BRAND.deep, opacity: 0.3 },
+        { color: SECTION_BRAND.soft, opacity: 0.42 },
       ],
     ];
 
@@ -1469,8 +1469,8 @@
         primaryTextColor: "#152028",
         primaryBorderColor: CHART_COLORS.taskFill,
         lineColor: CHART_COLORS.axis,
-        sectionBkgColor: "rgba(15, 118, 110, 0.14)",
-        altSectionBkgColor: "rgba(216, 243, 239, 0.45)",
+        sectionBkgColor: "rgba(15, 118, 110, 0.28)",
+        altSectionBkgColor: "rgba(216, 243, 239, 0.65)",
         gridColor: CHART_COLORS.grid,
         taskBkgColor: CHART_COLORS.taskFill,
         taskBorderColor: CHART_COLORS.taskStroke,
@@ -1489,10 +1489,10 @@
       themeCSS: `
         .task { stroke: ${CHART_COLORS.taskStroke} !important; stroke-width: 1.75px !important; }
         rect.task { stroke: ${CHART_COLORS.taskStroke} !important; stroke-width: 1.75px !important; }
-        .section0 { fill: rgba(15, 118, 110, 0.14) !important; }
-        .section1 { fill: rgba(216, 243, 239, 0.45) !important; }
-        .section2 { fill: rgba(11, 95, 89, 0.12) !important; }
-        .section3 { fill: rgba(232, 241, 239, 0.7) !important; }
+        .section0 { fill: rgba(15, 118, 110, 0.28) !important; }
+        .section1 { fill: rgba(216, 243, 239, 0.65) !important; }
+        .section2 { fill: rgba(11, 95, 89, 0.22) !important; }
+        .section3 { fill: rgba(232, 241, 239, 0.75) !important; }
       `,
       gantt: {
         titleTopMargin: 30,
