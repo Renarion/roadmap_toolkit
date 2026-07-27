@@ -238,6 +238,19 @@
     trigger.classList.toggle("is-placeholder", !(start && end));
   }
 
+  function updateRangeDraftLabel(card) {
+    const label = card.querySelector("[data-range-label]");
+    const trigger = card.querySelector("[data-action='open-range']");
+    if (!label || !trigger) return;
+    label.textContent = formatRangeLabel(rangePicker.draftStart, rangePicker.draftEnd);
+    trigger.classList.toggle("is-placeholder", !rangePicker.draftStart);
+  }
+
+  function getRangePickerCard() {
+    if (!rangePicker.taskId) return null;
+    return els.tasksContainer.querySelector(`[data-task-id="${rangePicker.taskId}"]`);
+  }
+
   const MONTH_NAMES = [
     "Январь",
     "Февраль",
@@ -259,6 +272,7 @@
     viewMonth: new Date().getMonth(),
     draftStart: "",
     draftEnd: "",
+    suppressOutsideClose: false,
   };
 
   function toIsoDate(date) {
@@ -279,13 +293,14 @@
     if (!popover) return;
     popover.hidden = true;
     rangePicker.taskId = null;
+    rangePicker.draftStart = "";
+    rangePicker.draftEnd = "";
+    rangePicker.suppressOutsideClose = false;
   }
 
   function applyRangeDraftToTask() {
     if (!rangePicker.taskId) return;
-    const card = els.tasksContainer.querySelector(
-      `[data-task-id="${rangePicker.taskId}"]`
-    );
+    const card = getRangePickerCard();
     if (!card) return;
 
     let start = rangePicker.draftStart;
@@ -302,6 +317,7 @@
   }
 
   function handleRangeDaySelect(iso, event) {
+    event.preventDefault();
     event.stopPropagation();
 
     if (!rangePicker.draftStart || (rangePicker.draftStart && rangePicker.draftEnd)) {
@@ -316,8 +332,29 @@
       }
     }
 
-    applyRangeDraftToTask();
+    const card = getRangePickerCard();
+    if (card) updateRangeDraftLabel(card);
     renderRangeCalendar();
+
+    if (rangePicker.draftStart && rangePicker.draftEnd) {
+      applyRangeDraftToTask();
+    }
+  }
+
+  function positionRangePicker(anchor, popover) {
+    const rect = anchor.getBoundingClientRect();
+    const popWidth = popover.offsetWidth || 320;
+    const popHeight = popover.offsetHeight || 360;
+    let left = rect.left;
+    let top = rect.bottom + 8;
+    if (left + popWidth > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - popWidth - 8);
+    }
+    if (top + popHeight > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - popHeight - 8);
+    }
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
   }
 
   function renderRangeCalendar() {
@@ -366,6 +403,11 @@
         btn.classList.add("is-in-range");
       }
 
+      btn.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+
       btn.addEventListener("click", (event) => {
         handleRangeDaySelect(iso, event);
       });
@@ -379,9 +421,21 @@
     const popover = document.getElementById("date-range-popover");
     if (!card || !popover) return;
 
+    if (!popover.hidden && rangePicker.taskId === taskId) {
+      positionRangePicker(anchor, popover);
+      return;
+    }
+
+    if (!popover.hidden && rangePicker.taskId && rangePicker.taskId !== taskId) {
+      applyRangeDraftToTask();
+      closeRangePicker();
+    }
+
+    rangePicker.suppressOutsideClose = true;
+    rangePicker.taskId = taskId;
+
     const start = card.querySelector('[data-field="start"]').value;
     const end = card.querySelector('[data-field="end"]').value;
-    rangePicker.taskId = taskId;
     rangePicker.draftStart = start;
     rangePicker.draftEnd = end;
 
@@ -391,20 +445,11 @@
 
     renderRangeCalendar();
     popover.hidden = false;
+    positionRangePicker(anchor, popover);
 
-    const rect = anchor.getBoundingClientRect();
-    const popWidth = popover.offsetWidth || 320;
-    const popHeight = popover.offsetHeight || 360;
-    let left = rect.left;
-    let top = rect.bottom + 8;
-    if (left + popWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - popWidth - 8);
-    }
-    if (top + popHeight > window.innerHeight - 8) {
-      top = Math.max(8, rect.top - popHeight - 8);
-    }
-    popover.style.left = `${left}px`;
-    popover.style.top = `${top}px`;
+    window.setTimeout(() => {
+      rangePicker.suppressOutsideClose = false;
+    }, 0);
   }
 
   function bindRangePickerControls() {
@@ -412,7 +457,19 @@
     if (!popover || popover.dataset.bound === "1") return;
     popover.dataset.bound = "1";
 
+    popover.addEventListener("mousedown", (event) => {
+      event.stopPropagation();
+    });
+
     popover.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+
+    document.getElementById("range-prev-month")?.addEventListener("mousedown", (event) => {
+      event.stopPropagation();
+    });
+
+    document.getElementById("range-next-month")?.addEventListener("mousedown", (event) => {
       event.stopPropagation();
     });
 
@@ -440,7 +497,8 @@
       event.stopPropagation();
       rangePicker.draftStart = "";
       rangePicker.draftEnd = "";
-      applyRangeDraftToTask();
+      const card = getRangePickerCard();
+      if (card) updateRangeDraftLabel(card);
       renderRangeCalendar();
     });
 
@@ -450,15 +508,23 @@
       closeRangePicker();
     });
 
-    document.addEventListener("click", (event) => {
-      if (popover.hidden) return;
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (popover.contains(target)) return;
-      if (target.closest("[data-action='open-range']")) return;
-      applyRangeDraftToTask();
-      closeRangePicker();
-    });
+    document.addEventListener(
+      "mousedown",
+      (event) => {
+        if (popover.hidden || rangePicker.suppressOutsideClose) return;
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (popover.contains(target)) return;
+        if (target.closest("[data-action='open-range']")) return;
+
+        // Stay open until the end date is picked.
+        if (rangePicker.draftStart && !rangePicker.draftEnd) return;
+
+        applyRangeDraftToTask();
+        closeRangePicker();
+      },
+      true
+    );
 
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !popover.hidden) {
@@ -509,8 +575,14 @@
         saveToLocalStorage();
       });
 
-      card.querySelector('[data-action="open-range"]').addEventListener("click", (event) => {
+      card.querySelector('[data-action="open-range"]').addEventListener("mousedown", (event) => {
         event.stopPropagation();
+      });
+
+      card.querySelector('[data-action="open-range"]').addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        rangePicker.suppressOutsideClose = true;
         openRangePicker(task.id, event.currentTarget);
       });
 
@@ -865,7 +937,7 @@
     const variants = [
       [
         { color: SECTION_BRAND.strong, opacity: 0.24 },
-        { color: SECTION_BRAND.soft, opacity: 0.1 },
+        { color: SECTION_BRAND.soft, opacity: 0.25 },
       ],
       [
         { color: SECTION_BRAND.soft, opacity: 0.55 },
