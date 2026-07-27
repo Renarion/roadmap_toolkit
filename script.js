@@ -780,11 +780,12 @@
     });
 
     const lines = [
-      `%%{init: {"gantt": {"useWidth": ${useWidth}, "leftPadding": ${leftPadding}, "rightPadding": 40, "useMaxWidth": false, "barHeight": 30, "barGap": 12, "fontSize": 16, "sectionFontSize": 16, "topPadding": 68, "titleTopMargin": 30, "gridLineStartPadding": 28}} }%%`,
+      `%%{init: {"gantt": {"useWidth": ${useWidth}, "leftPadding": ${leftPadding}, "rightPadding": 40, "useMaxWidth": false, "barHeight": 30, "barGap": 12, "fontSize": 16, "sectionFontSize": 16, "topPadding": 68, "titleTopMargin": 30, "gridLineStartPadding": 28, "weekday": "monday"}} }%%`,
       "gantt",
       `    title ${safeTitle}`,
       "    dateFormat YYYY-MM-DD",
       "    axisFormat %d.%m",
+      "    weekday monday",
       "    todayMarker off",
       "",
     ];
@@ -1875,6 +1876,7 @@
         sectionFontSize: 16,
         numberSectionStyles: 2,
         useMaxWidth: false,
+        weekday: "monday",
       },
     });
 
