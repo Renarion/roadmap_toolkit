@@ -113,32 +113,6 @@
     return Math.max(1, Math.round((end - start) / 86400000) + 1);
   }
 
-  function getTimelineSpanDays(taskList) {
-    const starts = taskList.map((task) => task.start).filter(Boolean).sort();
-    const ends = taskList.map((task) => task.end).filter(Boolean).sort();
-    if (!starts.length || !ends.length) return 30;
-
-    const span = daysBetween(starts[0], ends[ends.length - 1]);
-    // Mermaid adds a little padding on the axis; reserve room for extra ticks.
-    return Math.max(span + 4, 7);
-  }
-
-  function pickTickInterval(spanDays) {
-    if (spanDays <= 21) return "1day";
-    if (spanDays <= 90) return "1week";
-    if (spanDays <= 210) return "2week";
-    return "1month";
-  }
-
-  function getMinPxPerDay(spanDays, tickInterval) {
-    if (tickInterval === "1day") {
-      return spanDays <= 14 ? 56 : 48;
-    }
-    if (tickInterval === "1week") return 20;
-    if (tickInterval === "2week") return 14;
-    return 10;
-  }
-
   function estimateChartLayout(taskList) {
     const labels = taskList.flatMap((task) => [
       truncateLabel(task.category, 36),
@@ -146,16 +120,48 @@
     ]);
     const longest = labels.reduce((max, label) => Math.max(max, label.length), 8);
     const leftPadding = Math.min(460, Math.max(220, longest * 11 + 36));
-    const rightPadding = 40;
+    const rightPadding = 32;
 
-    const spanDays = getTimelineSpanDays(taskList);
-    const tickInterval = pickTickInterval(spanDays);
-    const minPxPerDay = getMinPxPerDay(spanDays, tickInterval);
-    const timelineWidth = Math.ceil(spanDays * minPxPerDay);
-    const contentWidth = Math.ceil(leftPadding + timelineWidth + rightPadding);
-    const useWidth = Math.max(contentWidth, 640);
+    const starts = taskList.map((task) => task.start).filter(Boolean).sort();
+    const ends = taskList.map((task) => task.end).filter(Boolean).sort();
+    const spanDays =
+      starts.length && ends.length
+        ? daysBetween(starts[0], ends[ends.length - 1])
+        : 30;
 
-    return { leftPadding, useWidth, tickInterval };
+    const scrollEl = document.getElementById("diagram-scroll");
+    const pageBudget = Math.min(window.innerWidth - 32, 1560);
+    const available = Math.max(
+      1180,
+      (scrollEl?.clientWidth || 0) - 4,
+      pageBudget - 48
+    );
+
+    // Short timelines need extra width so daily labels do not overlap.
+    if (spanDays <= 21) {
+      const paddedSpan = Math.max(spanDays + 4, 7);
+      const minPxPerDay = spanDays <= 14 ? 56 : 48;
+      const timelineWidth = Math.ceil(paddedSpan * minPxPerDay);
+      const contentWidth = Math.ceil(leftPadding + timelineWidth + rightPadding);
+      const useWidth = Math.max(contentWidth, 640);
+      return { leftPadding, useWidth };
+    }
+
+    // Longer timelines: fit into the visible width (Mermaid picks sensible weekly ticks).
+    const timelineBudget = Math.max(820, available - leftPadding - rightPadding);
+    let pxPerDay;
+    if (spanDays <= 100) {
+      pxPerDay = Math.min(16, Math.max(10, timelineBudget / spanDays));
+    } else if (spanDays <= 180) {
+      pxPerDay = Math.min(13, Math.max(8, timelineBudget / spanDays));
+    } else {
+      pxPerDay = Math.min(10, Math.max(6, timelineBudget / spanDays));
+    }
+
+    const contentWidth = Math.ceil(leftPadding + spanDays * pxPerDay + rightPadding);
+    const useWidth = Math.min(available, contentWidth);
+
+    return { leftPadding, useWidth };
   }
 
   function slugifyFilename(text) {
@@ -732,7 +738,7 @@
 
   function generateMermaidCode(title, taskList) {
     const safeTitle = truncateLabel(title, 60) || DEFAULT_TITLE;
-    const { leftPadding, useWidth, tickInterval } = estimateChartLayout(taskList);
+    const { leftPadding, useWidth } = estimateChartLayout(taskList);
     const sections = new Map();
 
     taskList.forEach((task) => {
@@ -749,7 +755,6 @@
       `    title ${safeTitle}`,
       "    dateFormat YYYY-MM-DD",
       "    axisFormat %d.%m",
-      `    tickInterval ${tickInterval}`,
       "    todayMarker off",
       "",
     ];
@@ -1007,7 +1012,6 @@
       holder.innerHTML = svg;
       lastMermaidCode = mermaidCode;
       emphasizeAxisDates();
-      optimizeAxisTicks();
       emphasizeDiagramText();
       styleTaskBars();
       colorSectionBands();
@@ -1048,40 +1052,6 @@
     svg.querySelectorAll(".tick text, g.grid .tick text").forEach((node) => {
       node.setAttribute("font-size", "16");
       node.setAttribute("font-weight", "600");
-    });
-  }
-
-  function optimizeAxisTicks() {
-    const svg = els.diagramContainer.querySelector("svg");
-    if (!svg) return;
-
-    const ticks = [...svg.querySelectorAll("g.tick text, .grid .tick text, .tick text")]
-      .map((node) => ({
-        node,
-        x: Number(node.getAttribute("x") || 0),
-        text: (node.textContent || "").trim(),
-      }))
-      .filter((tick) => tick.text && Number.isFinite(tick.x))
-      .sort((a, b) => a.x - b.x);
-
-    if (ticks.length < 2) return;
-
-    const MIN_GAP = 52;
-    let lastVisibleX = ticks[0].x;
-
-    ticks.forEach((tick, index) => {
-      if (index === 0 || index === ticks.length - 1) {
-        lastVisibleX = tick.x;
-        return;
-      }
-
-      if (tick.x - lastVisibleX < MIN_GAP) {
-        tick.node.setAttribute("display", "none");
-        const tickGroup = tick.node.closest("g.tick");
-        tickGroup?.querySelector("line")?.setAttribute("display", "none");
-      } else {
-        lastVisibleX = tick.x;
-      }
     });
   }
 
