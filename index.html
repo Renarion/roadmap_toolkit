@@ -49,6 +49,18 @@
           <button type="button" class="btn btn-primary" id="build-btn">Построить roadmap</button>
         </div>
       </section>
+
+      <section class="panel mermaid-import-panel" aria-labelledby="mermaid-import-heading">
+        <h2 id="mermaid-import-heading">Импорт из Mermaid</h2>
+        <p class="tasks-hint">Вставьте код диаграммы gantt — поля выше заполнятся автоматически, и вы сможете их отредактировать.</p>
+        <div class="field">
+          <label for="mermaid-import-input">Код Mermaid</label>
+          <textarea id="mermaid-import-input" class="mermaid-import-input" rows="10" placeholder="gantt&#10;    title Планы Q3 2026&#10;    dateFormat YYYY-MM-DD&#10;    section Категория&#10;    Задача :2026-07-01, 2026-08-16"></textarea>
+          <p class="field-error" id="mermaid-import-error" hidden></p>
+          <p class="mermaid-import-note" id="mermaid-import-note" hidden></p>
+        </div>
+        <button type="button" class="btn btn-secondary mermaid-import-btn" id="mermaid-import-btn">Отрисовать из Mermaid</button>
+      </section>
       </div>
 
       <section class="result" id="result-section" hidden>

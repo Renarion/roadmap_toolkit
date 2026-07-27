@@ -68,6 +68,10 @@
     copyMermaidBtn: document.getElementById("copy-mermaid-btn"),
     copyToast: document.getElementById("copy-toast"),
     taskTemplate: document.getElementById("task-template"),
+    mermaidImportInput: document.getElementById("mermaid-import-input"),
+    mermaidImportBtn: document.getElementById("mermaid-import-btn"),
+    mermaidImportError: document.getElementById("mermaid-import-error"),
+    mermaidImportNote: document.getElementById("mermaid-import-note"),
   };
 
   function uid() {
@@ -765,6 +769,209 @@
     return `${y}-${m}-${d}`;
   }
 
+  function subtractOneDay(isoDate) {
+    const date = new Date(`${isoDate}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return isoDate;
+    date.setDate(date.getDate() - 1);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const DURATION_RE = /^(\d+)([dhwm])$/i;
+  const TASK_STATUS_RE = /^(done|active|crit|milestone)$/i;
+
+  function stripMermaidInitBlock(code) {
+    return String(code ?? "").replace(/%%\{init:[\s\S]*?\}%%/g, "").trim();
+  }
+
+  function addDurationInclusive(startIso, durationToken) {
+    const match = durationToken.match(DURATION_RE);
+    if (!match) return startIso;
+
+    const amount = Number.parseInt(match[1], 10);
+    const unit = match[2].toLowerCase();
+    let days = amount;
+    if (unit === "w") days = amount * 7;
+    if (unit === "h") days = Math.max(1, Math.ceil(amount / 24));
+    if (unit === "m") days = amount * 30;
+
+    const date = new Date(`${startIso}T00:00:00`);
+    date.setDate(date.getDate() + days - 1);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function parseTaskMeta(meta) {
+    const parts = meta
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (!parts.length) return null;
+    if (parts.some((part) => /^after\b/i.test(part))) return null;
+
+    const cleaned = parts.filter((part) => {
+      if (TASK_STATUS_RE.test(part)) return false;
+      if (ISO_DATE_RE.test(part) || DURATION_RE.test(part)) return true;
+      return false;
+    });
+
+    const dates = cleaned.filter((part) => ISO_DATE_RE.test(part));
+    const durations = cleaned.filter((part) => DURATION_RE.test(part));
+
+    if (dates.length >= 2) {
+      const start = dates[0];
+      const endRaw = dates[dates.length - 1];
+      let end = subtractOneDay(endRaw);
+      if (end < start) {
+        end = endRaw;
+      }
+      return { start, end };
+    }
+
+    if (dates.length === 1 && durations.length >= 1) {
+      return {
+        start: dates[0],
+        end: addDurationInclusive(dates[0], durations[0]),
+      };
+    }
+
+    return null;
+  }
+
+  function parseMermaidGantt(code) {
+    const skipped = [];
+    const lines = stripMermaidInitBlock(code)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("%%"));
+
+    let title = DEFAULT_TITLE;
+    let currentSection = "";
+    const parsedTasks = [];
+
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (lower === "gantt") continue;
+      if (lower.startsWith("title ")) {
+        title = line.slice(6).trim() || DEFAULT_TITLE;
+        continue;
+      }
+      if (
+        lower.startsWith("dateformat") ||
+        lower.startsWith("axisformat") ||
+        lower.startsWith("todaymarker") ||
+        lower.startsWith("excludes") ||
+        lower.startsWith("inclusiveenddates")
+      ) {
+        continue;
+      }
+
+      if (/^section\s+/i.test(line)) {
+        currentSection = line.replace(/^section\s+/i, "").trim();
+        continue;
+      }
+
+      const colonIndex = line.indexOf(":");
+      if (colonIndex === -1) continue;
+
+      const name = line.slice(0, colonIndex).trim();
+      const meta = line.slice(colonIndex + 1).trim();
+      if (!name) continue;
+
+      const parsed = parseTaskMeta(meta);
+      if (!parsed) {
+        skipped.push(name);
+        continue;
+      }
+
+      parsedTasks.push({
+        category: currentSection,
+        name,
+        start: parsed.start,
+        end: parsed.end,
+      });
+    }
+
+    return { title, tasks: parsedTasks, skipped };
+  }
+
+  function setMermaidImportError(message) {
+    if (!message) {
+      els.mermaidImportError.hidden = true;
+      els.mermaidImportError.textContent = "";
+      return;
+    }
+    els.mermaidImportError.hidden = false;
+    els.mermaidImportError.textContent = message;
+  }
+
+  function setMermaidImportNote(message) {
+    if (!message) {
+      els.mermaidImportNote.hidden = true;
+      els.mermaidImportNote.textContent = "";
+      return;
+    }
+    els.mermaidImportNote.hidden = false;
+    els.mermaidImportNote.textContent = message;
+  }
+
+  async function handleMermaidImport() {
+    const code = els.mermaidImportInput.value.trim();
+    setMermaidImportError("");
+    setMermaidImportNote("");
+
+    if (!code) {
+      setMermaidImportError("Вставьте код Mermaid");
+      return;
+    }
+
+    const parsed = parseMermaidGantt(code);
+
+    if (parsed.tasks.length) {
+      els.title.value = parsed.title;
+      tasks = parsed.tasks.map((task) =>
+        createEmptyTask({
+          category: task.category,
+          name: task.name,
+          start: task.start,
+          end: task.end,
+        })
+      );
+      renderTasks();
+      clearFieldErrors();
+      setFormError("");
+
+      if (parsed.skipped.length) {
+        setMermaidImportNote(
+          `Импортировано ${parsed.tasks.length} задач. Не удалось разобрать: ${parsed.skipped.join(", ")}.`
+        );
+      }
+    } else {
+      setMermaidImportNote(
+        "Задачи из кода не распознаны — диаграмма будет построена без обновления полей."
+      );
+    }
+
+    showLoader(true);
+    await wait(LOADER_MS);
+
+    const ok = await renderRoadmap(code);
+    showLoader(false);
+
+    if (!ok) return;
+
+    hasBuiltOnce = true;
+    els.buildBtn.textContent = "Обновить roadmap";
+    els.resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    saveToLocalStorage();
+  }
+
   function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -936,16 +1143,16 @@
 
     const variants = [
       [
-        { color: SECTION_BRAND.strong, opacity: 0.38 },
-        { color: SECTION_BRAND.soft, opacity: 0.22 },
+        { color: SECTION_BRAND.strong, opacity: 0.62 },
+        { color: SECTION_BRAND.soft, opacity: 0.48 },
       ],
       [
-        { color: SECTION_BRAND.soft, opacity: 0.78 },
-        { color: "#ffffff", opacity: 0.08 },
+        { color: SECTION_BRAND.soft, opacity: 0.92 },
+        { color: "#ffffff", opacity: 0.2 },
       ],
       [
-        { color: SECTION_BRAND.deep, opacity: 0.3 },
-        { color: SECTION_BRAND.soft, opacity: 0.42 },
+        { color: SECTION_BRAND.deep, opacity: 0.52 },
+        { color: SECTION_BRAND.soft, opacity: 0.65 },
       ],
     ];
 
@@ -1372,6 +1579,7 @@
         start,
         end,
       })),
+      mermaidImport: els.mermaidImportInput.value,
     };
 
     try {
@@ -1407,6 +1615,10 @@
         tasks = [createEmptyTask()];
       }
 
+      if (typeof data.mermaidImport === "string") {
+        els.mermaidImportInput.value = data.mermaidImport;
+      }
+
       return true;
     } catch (error) {
       console.warn("Failed to restore localStorage", error);
@@ -1423,6 +1635,9 @@
     els.buildBtn.textContent = "Построить roadmap";
     els.resultSection.hidden = true;
     els.diagramContainer.replaceChildren();
+    els.mermaidImportInput.value = "";
+    setMermaidImportError("");
+    setMermaidImportNote("");
     setFormError("");
     setRenderError("");
     clearFieldErrors();
@@ -1469,8 +1684,8 @@
         primaryTextColor: "#152028",
         primaryBorderColor: CHART_COLORS.taskFill,
         lineColor: CHART_COLORS.axis,
-        sectionBkgColor: "rgba(15, 118, 110, 0.28)",
-        altSectionBkgColor: "rgba(216, 243, 239, 0.65)",
+        sectionBkgColor: "rgba(15, 118, 110, 0.48)",
+        altSectionBkgColor: "rgba(216, 243, 239, 0.82)",
         gridColor: CHART_COLORS.grid,
         taskBkgColor: CHART_COLORS.taskFill,
         taskBorderColor: CHART_COLORS.taskStroke,
@@ -1489,10 +1704,10 @@
       themeCSS: `
         .task { stroke: ${CHART_COLORS.taskStroke} !important; stroke-width: 1.75px !important; }
         rect.task { stroke: ${CHART_COLORS.taskStroke} !important; stroke-width: 1.75px !important; }
-        .section0 { fill: rgba(15, 118, 110, 0.28) !important; }
-        .section1 { fill: rgba(216, 243, 239, 0.65) !important; }
-        .section2 { fill: rgba(11, 95, 89, 0.22) !important; }
-        .section3 { fill: rgba(232, 241, 239, 0.75) !important; }
+        .section0 { fill: rgba(15, 118, 110, 0.48) !important; }
+        .section1 { fill: rgba(216, 243, 239, 0.82) !important; }
+        .section2 { fill: rgba(11, 95, 89, 0.42) !important; }
+        .section3 { fill: rgba(232, 241, 239, 0.88) !important; }
       `,
       gantt: {
         titleTopMargin: 30,
@@ -1530,6 +1745,14 @@
     els.copyMermaidBtn.addEventListener("click", () => {
       copyMermaidCode().catch(console.error);
     });
+    els.mermaidImportBtn.addEventListener("click", () => {
+      handleMermaidImport().catch((error) => {
+        console.error(error);
+        showLoader(false);
+        setMermaidImportError("Не удалось построить диаграмму из Mermaid-кода");
+      });
+    });
+    els.mermaidImportInput.addEventListener("input", saveToLocalStorage);
     els.title.addEventListener("input", saveToLocalStorage);
   }
 
