@@ -5,6 +5,24 @@
   const LOADER_MS = 450;
   const DEFAULT_TITLE = "Roadmap";
 
+  // Category row backgrounds on the Gantt chart (edit here).
+  const SECTION_PALETTE = [
+    "#d8c8f4",
+    "#ffffff",
+    "#ffe39a",
+    "#c6e8d4",
+    "#cfe3fb",
+    "#f7dcc8",
+  ];
+
+  // Task bar colors on the Gantt chart (edit here).
+  const CHART_COLORS = {
+    taskFill: "#0f766e",
+    taskStroke: "#084c47",
+    grid: "#d7e0e6",
+    axis: "#8aa0ad",
+  };
+
   const EXAMPLE = {
     title: "Планы Q3 2026",
     tasks: [
@@ -108,28 +126,26 @@
     const spanDays = daysBetween(starts[0], ends[ends.length - 1]);
 
     const scrollEl = document.getElementById("diagram-scroll");
-    const pageBudget = Math.min(window.innerWidth - 48, 1400);
+    const pageBudget = Math.min(window.innerWidth - 32, 1560);
     const available = Math.max(
-      1100,
-      (scrollEl?.clientWidth || 0) - 8,
-      pageBudget - 64
+      1180,
+      (scrollEl?.clientWidth || 0) - 4,
+      pageBudget - 48
     );
 
-    // Fit a typical quarter into the visible frame with only light sideways scroll.
-    const timelineBudget = Math.max(760, available - leftPadding - 40);
+    // Fit the timeline into the visible width to reduce horizontal scrolling.
+    const timelineBudget = Math.max(820, available - leftPadding - 32);
     let pxPerDay;
     if (spanDays <= 100) {
-      pxPerDay = Math.min(14, Math.max(9, timelineBudget / spanDays));
+      pxPerDay = Math.min(16, Math.max(10, timelineBudget / spanDays));
     } else if (spanDays <= 180) {
-      pxPerDay = Math.min(11, Math.max(7, timelineBudget / spanDays));
+      pxPerDay = Math.min(13, Math.max(8, timelineBudget / spanDays));
     } else {
-      pxPerDay = Math.min(9, Math.max(5, timelineBudget / spanDays));
+      pxPerDay = Math.min(10, Math.max(6, timelineBudget / spanDays));
     }
 
-    const useWidth = Math.max(
-      available,
-      Math.ceil(leftPadding + spanDays * pxPerDay + 40)
-    );
+    const contentWidth = Math.ceil(leftPadding + spanDays * pxPerDay + 32);
+    const useWidth = Math.min(available, contentWidth);
 
     return { leftPadding, useWidth };
   }
@@ -762,8 +778,8 @@
     const svg = els.diagramContainer.querySelector("svg");
     if (!svg) return;
 
-    const fill = "#0f766e";
-    const stroke = "#084c47";
+    const fill = CHART_COLORS.taskFill;
+    const stroke = CHART_COLORS.taskStroke;
 
     svg.querySelectorAll("rect").forEach((rect) => {
       if (!isTaskRect(rect)) return;
@@ -784,7 +800,7 @@
     const fillAttr = String(rect.getAttribute("fill") || "").toLowerCase();
     return (
       /\btask\b/i.test(cls) ||
-      fillAttr === "#0f766e" ||
+      fillAttr === CHART_COLORS.taskFill.toLowerCase() ||
       fillAttr === "#0b5f59" ||
       fillAttr === "#5b8a84"
     );
@@ -794,7 +810,7 @@
     const svg = els.diagramContainer.querySelector("svg");
     if (!svg) return;
 
-    const palette = ["#ebe6f7", "#ffffff", "#fff3d1", "#e7f3ee", "#e6f0fa", "#f7efe8"];
+    const palette = SECTION_PALETTE;
     const sectionRects = [...svg.querySelectorAll("rect")].filter((rect) => {
       const cls = String(rect.getAttribute("class") || "");
       return /section/i.test(cls) && !isTaskRect(rect);
@@ -1315,13 +1331,13 @@
         fontFamily: "DM Sans, Segoe UI, sans-serif",
         primaryColor: "#d8f3ef",
         primaryTextColor: "#152028",
-        primaryBorderColor: "#0f766e",
-        lineColor: "#8aa0ad",
-        sectionBkgColor: "#ebe6f7",
-        altSectionBkgColor: "#fff3d1",
-        gridColor: "#d7e0e6",
-        taskBkgColor: "#0f766e",
-        taskBorderColor: "#084c47",
+        primaryBorderColor: CHART_COLORS.taskFill,
+        lineColor: CHART_COLORS.axis,
+        sectionBkgColor: SECTION_PALETTE[0],
+        altSectionBkgColor: SECTION_PALETTE[2],
+        gridColor: CHART_COLORS.grid,
+        taskBkgColor: CHART_COLORS.taskFill,
+        taskBorderColor: CHART_COLORS.taskStroke,
         taskTextColor: "#ffffff",
         taskTextLightColor: "#ffffff",
         taskTextOutsideColor: "#152028",
@@ -1335,12 +1351,12 @@
         todayLineColor: "#152028",
       },
       themeCSS: `
-        .task { stroke: #084c47 !important; stroke-width: 1.75px !important; }
-        rect.task { stroke: #084c47 !important; stroke-width: 1.75px !important; }
-        .section0 { fill: #ebe6f7 !important; }
-        .section1 { fill: #ffffff !important; }
-        .section2 { fill: #fff3d1 !important; }
-        .section3 { fill: #e7f3ee !important; }
+        .task { stroke: ${CHART_COLORS.taskStroke} !important; stroke-width: 1.75px !important; }
+        rect.task { stroke: ${CHART_COLORS.taskStroke} !important; stroke-width: 1.75px !important; }
+        .section0 { fill: ${SECTION_PALETTE[0]} !important; }
+        .section1 { fill: ${SECTION_PALETTE[1]} !important; }
+        .section2 { fill: ${SECTION_PALETTE[2]} !important; }
+        .section3 { fill: ${SECTION_PALETTE[3]} !important; }
       `,
       gantt: {
         titleTopMargin: 30,

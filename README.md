@@ -2,104 +2,98 @@ Webpage: https://renarion.github.io/roadmap_toolkit/
 
 # Roadmap Toolkit
 
-Статический веб-инструмент для создания красивых roadmap / диаграмм Ганта прямо в браузере.
+A static browser tool for building Gantt / roadmap charts. No backend required.
 
-- Без backend, базы данных и регистрации
-- Данные сохраняются в `localStorage`
-- Диаграмма строится через [Mermaid.js](https://mermaid.js.org/) (CDN)
-- Готов к публикации на GitHub Pages
+## Quick start
 
-## Структура проекта
-
-```text
-roadmap_toolkit/
-├── index.html
-├── styles.css
-├── script.js
-└── README.md
-```
-
-## Как пользоваться
-
-1. Откройте сайт.
-2. Укажите название roadmap.
-3. Добавьте категории, задачи и даты.
-4. Нажмите **Построить roadmap**.
-5. При необходимости измените данные и нажмите **Обновить roadmap**.
-6. Скачайте SVG/PNG или скопируйте Mermaid-код.
-
-Кнопки:
-
-- **Загрузить пример** — подставит демо-данные
-- **Очистить всё** — удалит сохранённые данные после подтверждения
-- **+ Добавить задачу** — добавит новый блок
-- **Дублировать / Удалить** — действия для конкретной задачи
-
-## Локальный запуск
-
-Поскольку проект полностью статический, достаточно открыть файл:
-
-```text
-index.html
-```
-
-в браузере (двойной клик или «Open with…»).
-
-Если браузер ограничивает CDN/скрипты при `file://`, поднимите простой локальный сервер из папки проекта:
+1. Open `index.html` in a browser, or run a local server:
 
 ```bash
-# Python 3
 python3 -m http.server 8080
 ```
 
-Затем откройте:
+2. Add categories, tasks, and dates.
+3. Click **Build roadmap**.
+4. Export SVG / PNG if needed.
 
-```text
-http://localhost:8080
+## GitHub Pages
+
+1. Push the project to a GitHub repository.
+2. Go to **Settings → Pages**.
+3. Set **Deploy from a branch** → `main` → `/ (root)`.
+4. Open `https://<username>.github.io/<repo>/`.
+
+---
+
+## Customization
+
+### 1. Header text
+
+Edit `index.html`, block `<header class="hero">`:
+
+```html
+<p class="brand">Roadmap Toolkit</p>
+<h1>Your headline</h1>
+<p class="hero-lead">Your subtitle</p>
 ```
 
-## Публикация на GitHub Pages
+Header alignment is controlled in `styles.css` → `.hero` (`text-align: center`).
 
-1. Создайте новый репозиторий на GitHub (например, `roadmap_toolkit`).
-2. Загрузите в него файлы проекта:
-   - `index.html`
-   - `styles.css`
-   - `script.js`
-   - `README.md`
-3. Откройте **Settings → Pages**.
-4. В разделе **Build and deployment** выберите **Deploy from a branch**.
-5. Укажите ветку **main** и папку **/ (root)**.
-6. Нажмите **Save** и дождитесь публикации.
-7. Сайт будет доступен по адресу вида:
+---
 
-```text
-https://<username>.github.io/roadmap_toolkit/
+### 2. Diagram colors (task bars, grid, borders)
+
+Edit `script.js` at the top of the file:
+
+```js
+const CHART_COLORS = {
+  taskFill: "#0f766e",   // task bar fill
+  taskStroke: "#084c47", // task bar outline
+  grid: "#d7e0e6",       // grid lines
+  axis: "#8aa0ad",       // axis / labels
+};
 ```
 
-Пути в проекте относительные (`styles.css`, `script.js`), поэтому публикация в подпапке репозитория работает корректно.
+These values are also passed to Mermaid in `initMermaid()` → `themeVariables` and `themeCSS`.
 
-### Быстрая загрузка через Git
+Task bar outlines are additionally styled in `styleTaskBars()`.
 
-```bash
-git init
-git add index.html styles.css script.js README.md
-git commit -m "Add roadmap toolkit static site"
-git branch -M main
-git remote add origin https://github.com/<username>/roadmap_toolkit.git
-git push -u origin main
+---
+
+### 3. Category backgrounds on the diagram
+
+Edit `script.js`:
+
+```js
+const SECTION_PALETTE = [
+  "#d8c8f4", // category 1
+  "#ffffff", // category 2
+  "#ffe39a", // category 3
+  "#c6e8d4", // category 4
+  "#cfe3fb", // category 5
+  "#f7dcc8", // category 6
+];
 ```
 
-После этого включите GitHub Pages, как описано выше.
+This palette is used in three places:
 
-## Возможности
+| Location | Purpose |
+|----------|---------|
+| `colorSectionBands()` | paints row backgrounds after render |
+| `initMermaid()` → `themeVariables` | Mermaid default section colors |
+| `initMermaid()` → `themeCSS` | `.section0` … `.section3` classes |
 
-- Группировка задач по категориям в секции Mermaid Gantt
-- Валидация дат и обязательных полей
-- Повторное обновление диаграммы без дублирования SVG
-- Горизонтальный скролл для широких диаграмм
-- Экспорт SVG и PNG
-- Автосохранение формы в браузере
+After changing colors, rebuild the diagram in the browser.
 
-## Примечание
+---
 
-Для загрузки Mermaid.js нужен доступ в интернет (CDN). После первой загрузки библиотеки приложение работает полностью на стороне клиента.
+### 4. Page / diagram width
+
+In `styles.css`:
+
+```css
+--max: 1560px;      /* max page width (diagram block) */
+--form-max: 980px;  /* width of the input form */
+```
+
+Timeline scale (how much fits without horizontal scroll) is calculated in `script.js` → `estimateChartLayout()`.

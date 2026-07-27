@@ -16,7 +16,7 @@
   --radius-sm: 10px;
   --font: "DM Sans", "Segoe UI", sans-serif;
   --display: "Fraunces", Georgia, serif;
-  --max: 1400px;
+  --max: 1560px;
   --form-max: 980px;
 }
 
@@ -54,7 +54,7 @@ button {
 }
 
 .page {
-  width: min(100% - 1.5rem, var(--max));
+  width: min(100% - 1rem, var(--max));
   max-width: 100%;
   margin: 0 auto;
   padding: 2.5rem 0 3.5rem;
@@ -63,11 +63,12 @@ button {
 
 .hero {
   margin-bottom: 2rem;
+  text-align: center;
   animation: rise 0.55s ease both;
 }
 
 .brand {
-  margin: 0 0 0.65rem;
+  margin: 0 auto 0.65rem;
   font-family: var(--display);
   font-size: clamp(1.8rem, 3.2vw, 2.6rem);
   font-weight: 700;
@@ -76,8 +77,8 @@ button {
 }
 
 .hero h1 {
-  margin: 0 0 0.55rem;
-  max-width: 16ch;
+  margin: 0 auto 0.55rem;
+  max-width: 20ch;
   font-family: var(--display);
   font-size: clamp(1.55rem, 3vw, 2.15rem);
   font-weight: 600;
@@ -86,7 +87,7 @@ button {
 }
 
 .hero-lead {
-  margin: 0;
+  margin: 0 auto;
   max-width: 42rem;
   color: var(--ink-soft);
   font-size: 1.05rem;
