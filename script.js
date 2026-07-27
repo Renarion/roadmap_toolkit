@@ -131,13 +131,30 @@
     return tickCount * MIN_TICK_GAP;
   }
 
+  function measureCategoryWidth(text) {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return String(text || "").length * 10;
+    // Match sectionTitle styling (styles.css + emphasizeDiagramText).
+    ctx.font = '700 16px "DM Sans", "Segoe UI", sans-serif';
+    return ctx.measureText(String(text || "")).width;
+  }
+
   function estimateChartLayout(taskList) {
-    const labels = taskList.flatMap((task) => [
-      truncateLabel(task.category, 36),
-      truncateLabel(task.name, 40),
-    ]);
-    const longest = labels.reduce((max, label) => Math.max(max, label.length), 8);
-    const leftPadding = Math.min(460, Math.max(220, longest * 11 + 36));
+    // leftPadding is only for section/category labels; task names live inside bars.
+    const LEFT_INSET = 12;
+    const CATEGORY_GAP = 20;
+    const categories = taskList.map(
+      (task) => truncateLabel(task.category, 36) || "Без категории"
+    );
+    const longestWidth = categories.reduce(
+      (max, label) => Math.max(max, measureCategoryWidth(label)),
+      measureCategoryWidth("Категория")
+    );
+    const leftPadding = Math.min(
+      420,
+      Math.max(96, Math.ceil(LEFT_INSET + longestWidth + CATEGORY_GAP))
+    );
     const rightPadding = 32;
 
     const starts = taskList.map((task) => task.start).filter(Boolean).sort();
@@ -1851,7 +1868,7 @@
         barHeight: 30,
         barGap: 12,
         topPadding: 68,
-        leftPadding: 220,
+        leftPadding: 140,
         rightPadding: 40,
         gridLineStartPadding: 28,
         fontSize: 16,
