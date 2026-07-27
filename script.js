@@ -1369,6 +1369,49 @@
     });
   }
 
+  function getTranslateY(node) {
+    const transform = node.getAttribute("transform") || "";
+    const match = transform.match(/translate\(([^,]+),\s*([^)]+)\)/i);
+    if (!match) return 0;
+    const ty = Number(match[2]);
+    return Number.isFinite(ty) ? ty : 0;
+  }
+
+  function syncDateGridToTasks(svg) {
+    const tops = [];
+
+    svg.querySelectorAll("rect").forEach((rect) => {
+      if (!isTaskRect(rect)) return;
+      const y = Number(rect.getAttribute("y") || 0);
+      if (Number.isFinite(y)) tops.push(y);
+    });
+
+    if (!tops.length) return;
+    const targetTop = Math.min(...tops) - 6;
+
+    svg.querySelectorAll("g.grid").forEach((grid) => {
+      const gridY = getTranslateY(grid);
+      grid.querySelectorAll(".tick line, line").forEach((line) => {
+        const y1 = Number(line.getAttribute("y1") || 0);
+        const y2 = Number(line.getAttribute("y2") || 0);
+        if (!Number.isFinite(y1) || !Number.isFinite(y2)) return;
+
+        const absTop = gridY + Math.min(y1, y2);
+        if (absTop <= targetTop + 0.5) return;
+
+        const need = absTop - targetTop;
+        if (y2 < y1) {
+          line.setAttribute("y2", String(y2 - need));
+        } else if (y1 < y2) {
+          line.setAttribute("y1", String(y1 - need));
+        } else {
+          // Degenerate line — force upward span from the axis.
+          line.setAttribute("y2", String(-Math.abs(gridY - targetTop)));
+        }
+      });
+    });
+  }
+
   function wrapTaskBarLabels() {
     const svg = els.diagramContainer.querySelector("svg");
     if (!svg) return;
@@ -1456,6 +1499,8 @@
     }
 
     if (totalExtra > 0) {
+      syncDateGridToTasks(svg);
+
       try {
         const bbox = svg.getBBox();
         const width = Math.ceil(
