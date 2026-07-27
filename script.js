@@ -1150,10 +1150,6 @@
         { color: SECTION_BRAND.soft, opacity: 0.92 },
         { color: "#ffffff", opacity: 0.2 },
       ],
-      [
-        { color: SECTION_BRAND.deep, opacity: 0.52 },
-        { color: SECTION_BRAND.soft, opacity: 0.65 },
-      ],
     ];
 
     const ids = [];
@@ -1706,8 +1702,6 @@
         rect.task { stroke: ${CHART_COLORS.taskStroke} !important; stroke-width: 1.75px !important; }
         .section0 { fill: rgba(15, 118, 110, 0.48) !important; }
         .section1 { fill: rgba(216, 243, 239, 0.82) !important; }
-        .section2 { fill: rgba(11, 95, 89, 0.42) !important; }
-        .section3 { fill: rgba(232, 241, 239, 0.88) !important; }
       `,
       gantt: {
         titleTopMargin: 30,
@@ -1719,7 +1713,7 @@
         gridLineStartPadding: 28,
         fontSize: 16,
         sectionFontSize: 16,
-        numberSectionStyles: 4,
+        numberSectionStyles: 2,
         useMaxWidth: false,
       },
     });

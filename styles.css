@@ -168,6 +168,51 @@ button {
 
 .mermaid-import-panel {
   margin-top: 0;
+  overflow: visible;
+}
+
+.mermaid-import-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  user-select: none;
+}
+
+.mermaid-import-summary::-webkit-details-marker {
+  display: none;
+}
+
+.mermaid-import-chevron {
+  flex-shrink: 0;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 2px solid var(--ink-soft);
+  border-bottom: 2px solid var(--ink-soft);
+  transform: rotate(45deg) translateY(-1px);
+  transition: transform 0.2s ease, border-color 0.15s ease;
+}
+
+.mermaid-import-panel[open] .mermaid-import-chevron {
+  transform: rotate(225deg) translateY(1px);
+}
+
+.mermaid-import-summary:hover .mermaid-import-chevron {
+  border-color: var(--brand);
+}
+
+.mermaid-import-body {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+  padding-top: 0.15rem;
 }
 
 .mermaid-import-input {
@@ -192,8 +237,15 @@ button {
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
+.mermaid-import-actions {
+  margin-top: 0.25rem;
+}
+
 .mermaid-import-btn {
-  align-self: flex-start;
+  width: auto;
+  max-width: 100%;
+  padding: 0.55rem 1rem;
+  font-size: 0.9rem;
 }
 
 .mermaid-import-note {
