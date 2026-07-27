@@ -1266,40 +1266,32 @@
     return lines;
   }
 
-  function fitLabelLinesInBar(svg, text, maxWidth, maxHeight, fontWeight) {
-    const MIN_FONT = 11;
-    const MAX_FONT = 15;
-    const lineHeightFor = (fontSize) => Math.max(12, fontSize + 2);
+  function planBarLabel(svg, text, maxWidth, fontWeight) {
+    const FONT_SIZE = 15;
+    const LINE_HEIGHT = 17;
+    const PAD_Y = 10;
+    const MAX_LINES = 4;
 
-    for (let fontSize = MAX_FONT; fontSize >= MIN_FONT; fontSize -= 1) {
-      const lineHeight = lineHeightFor(fontSize);
-      const maxLines = Math.max(1, Math.floor((maxHeight - 6) / lineHeight));
-      let lines = wrapWordsToWidth(svg, text, maxWidth, fontSize, fontWeight);
-
-      if (lines.length <= maxLines) {
-        return { lines, fontSize, lineHeight };
-      }
-
-      if (fontSize === MIN_FONT) {
-        lines = lines.slice(0, maxLines);
-        let lastLine = lines[maxLines - 1] || "";
-        while (lastLine.length > 1) {
-          const candidate = `${lastLine.trimEnd()}…`;
-          if (measureTextWidth(svg, candidate, fontSize, fontWeight) <= maxWidth) {
-            lines[maxLines - 1] = candidate;
-            break;
-          }
-          lastLine = lastLine.slice(0, -1).trimEnd();
+    let lines = wrapWordsToWidth(svg, text, maxWidth, FONT_SIZE, fontWeight);
+    if (lines.length > MAX_LINES) {
+      lines = lines.slice(0, MAX_LINES);
+      let lastLine = lines[MAX_LINES - 1] || "";
+      while (lastLine.length > 1) {
+        const candidate = `${lastLine.trimEnd()}…`;
+        if (measureTextWidth(svg, candidate, FONT_SIZE, fontWeight) <= maxWidth) {
+          lines[MAX_LINES - 1] = candidate;
+          break;
         }
-        return { lines, fontSize, lineHeight };
+        lastLine = lastLine.slice(0, -1).trimEnd();
       }
     }
 
-    return {
-      lines: [text.slice(0, Math.max(1, text.length - 1)).trimEnd() + "…"],
-      fontSize: MIN_FONT,
-      lineHeight: lineHeightFor(MIN_FONT),
-    };
+    const neededHeight = Math.max(
+      30,
+      lines.length * LINE_HEIGHT + PAD_Y
+    );
+
+    return { lines, fontSize: FONT_SIZE, lineHeight: LINE_HEIGHT, neededHeight };
   }
 
   function applyBarLabel(label, rect, lines, fontSize, lineHeight, fontWeight) {
@@ -1333,11 +1325,55 @@
     label.dataset.wrapped = "1";
   }
 
+  function shiftSvgBelow(svg, fromY, delta) {
+    if (!(delta > 0)) return;
+
+    svg.querySelectorAll("*").forEach((node) => {
+      ["y", "y1", "y2"].forEach((attr) => {
+        if (!node.hasAttribute(attr)) return;
+        const value = Number(node.getAttribute(attr));
+        if (Number.isFinite(value) && value >= fromY - 0.01) {
+          node.setAttribute(attr, String(value + delta));
+        }
+      });
+
+      const transform = node.getAttribute("transform");
+      if (transform && /translate\(/i.test(transform)) {
+        node.setAttribute(
+          "transform",
+          transform.replace(/translate\(([^,]+),\s*([^)]+)\)/i, (_, x, y) => {
+            const ty = Number(y);
+            if (!Number.isFinite(ty) || ty < fromY - 0.01) {
+              return `translate(${x}, ${y})`;
+            }
+            return `translate(${x}, ${ty + delta})`;
+          })
+        );
+      }
+    });
+  }
+
+  function growSectionAround(svg, barY, extra) {
+    if (!(extra > 0)) return;
+
+    svg.querySelectorAll("rect").forEach((rect) => {
+      if (isTaskRect(rect)) return;
+      const y = Number(rect.getAttribute("y") || 0);
+      const h = Number(rect.getAttribute("height") || 0);
+      if (!Number.isFinite(y) || !Number.isFinite(h) || h <= 0) return;
+
+      // Grow the section band that currently covers this task bar.
+      if (y <= barY + 2 && y + h >= barY + 4) {
+        rect.setAttribute("height", String(h + extra));
+      }
+    });
+  }
+
   function wrapTaskBarLabels() {
     const svg = els.diagramContainer.querySelector("svg");
     if (!svg) return;
 
-    const PAD_X = 12;
+    const PAD_X = 10;
     const FONT_WEIGHT = 600;
 
     const bars = [...svg.querySelectorAll("rect")]
@@ -1353,6 +1389,8 @@
       ),
     ];
 
+    const plans = [];
+
     bars.forEach((rect) => {
       const x = Number(rect.getAttribute("x") || 0);
       const y = Number(rect.getAttribute("y") || 0);
@@ -1366,12 +1404,12 @@
       let label = null;
       let best = Infinity;
       labels.forEach((textNode) => {
-        if (textNode.dataset.wrapped === "1") return;
+        if (textNode.dataset.planned === "1") return;
         const tx = Number(textNode.getAttribute("x") || 0);
         const ty = Number(textNode.getAttribute("y") || 0);
         const dy = Math.abs(ty - cy);
         const dx = Math.abs(tx - cx);
-        if (dy > h + 10) return;
+        if (dy > h + 14) return;
         const score = dy * 3 + dx * 0.05;
         if (score < best) {
           best = score;
@@ -1384,10 +1422,58 @@
       const raw = (label.textContent || "").replace(/\s+/g, " ").trim();
       if (!raw) return;
 
-      const maxWidth = Math.max(28, w - PAD_X * 2);
-      const fitted = fitLabelLinesInBar(svg, raw, maxWidth, h, FONT_WEIGHT);
-      applyBarLabel(label, rect, fitted.lines, fitted.fontSize, fitted.lineHeight, FONT_WEIGHT);
+      const maxWidth = Math.max(24, w - PAD_X * 2);
+      const plan = planBarLabel(svg, raw, maxWidth, FONT_WEIGHT);
+      label.dataset.planned = "1";
+      plans.push({ rect, label, ...plan });
     });
+
+    // Expand from bottom to top so earlier expansions do not invalidate upper bars.
+    let totalExtra = 0;
+    for (let i = plans.length - 1; i >= 0; i -= 1) {
+      const plan = plans[i];
+      const rect = plan.rect;
+      const y = Number(rect.getAttribute("y") || 0);
+      const h = Number(rect.getAttribute("height") || 0);
+      const extra = Math.max(0, plan.neededHeight - h);
+
+      if (extra > 0) {
+        const fromY = y + h - 0.05;
+        shiftSvgBelow(svg, fromY, extra);
+        growSectionAround(svg, y, extra);
+        rect.setAttribute("height", String(h + extra));
+        totalExtra += extra;
+      }
+
+      applyBarLabel(
+        plan.label,
+        rect,
+        plan.lines,
+        plan.fontSize,
+        plan.lineHeight,
+        FONT_WEIGHT
+      );
+    }
+
+    if (totalExtra > 0) {
+      try {
+        const bbox = svg.getBBox();
+        const width = Math.ceil(
+          Math.max(bbox.x + bbox.width, Number(svg.getAttribute("width") || 0))
+        );
+        const height = Math.ceil(
+          Math.max(
+            bbox.y + bbox.height + 16,
+            Number(svg.getAttribute("height") || 0) + totalExtra
+          )
+        );
+        svg.setAttribute("width", String(width));
+        svg.setAttribute("height", String(height));
+        svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      } catch (_) {
+        /* ignore */
+      }
+    }
   }
 
   function measureSvgSize(svg) {
